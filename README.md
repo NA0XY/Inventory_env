@@ -6,8 +6,8 @@ colorTo: indigo
 sdk: docker
 app_port: 7860
 tags:
-	- openenv
-	- finance
+  - openenv
+  - finance
 ---
 
 # InvoiceProcessingEnv
