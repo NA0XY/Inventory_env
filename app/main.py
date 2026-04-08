@@ -18,6 +18,16 @@ app = FastAPI(
 _env = InvoiceProcessingEnv()
 
 
+@app.get("/")
+async def root() -> dict[str, Any]:
+    return {
+        "name": "invoice-processing-env",
+        "status": "healthy",
+        "message": "InvoiceProcessingEnv is running.",
+        "endpoints": ["/health", "/tasks", "/reset", "/step", "/state", "/docs"],
+    }
+
+
 @app.get("/health")
 async def health() -> dict:
     return {"status": "healthy", "env": "invoice-processing-env", "version": "1.0.0"}
