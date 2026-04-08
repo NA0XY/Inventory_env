@@ -17,21 +17,27 @@ MAX_STEPS = 3
 SUCCESS_THRESHOLD = 0.6
 
 
+def _single_line(s: str) -> str:
+    return str(s).replace("\r", " ").replace("\n", " ").strip()
+
+
 def log_start(task: str, env: str, model: str):
     print(f"[START] task={task} env={env} model={model}", flush=True)
 
 
 def log_step(step: int, action: Any, reward: float, done: bool, error: Optional[str]):
-    action_str = action if isinstance(action, str) else json.dumps(action)
+    action_str = action if isinstance(action, str) else json.dumps(action, separators=(",", ":"), ensure_ascii=False)
+    action_str = _single_line(action_str)
+    error_str = "null" if error is None else _single_line(error)
     print(
-        f"[STEP] step={step} action={action_str} reward={reward:.2f} done={str(done).lower()} error={error or 'null'}",
+        f"[STEP] step={step} action={action_str} reward={reward:.2f} done={str(done).lower()} error={error_str}",
         flush=True,
     )
 
 
 def log_end(success: bool, steps: int, score: float, rewards: List[float]):
     rewards_str = ",".join(f"{r:.2f}" for r in rewards)
-    print(f"[END] success={str(success).lower()} steps={steps} score={score:.3f} rewards={rewards_str}", flush=True)
+    print(f"[END] success={str(success).lower()} steps={steps} score={score:.2f} rewards={rewards_str}", flush=True)
 
 
 def call_llm(client: OpenAI, system: str, user: str) -> str:
@@ -154,9 +160,15 @@ Return ONLY JSON with keys missing_invoices and discrepancy_invoices.""",
 def run_task(client: OpenAI, http: httpx.Client, task_id: str) -> float:
     log_start(task=task_id, env=BENCHMARK, model=MODEL_NAME)
 
-    r = http.post(f"{ENV_BASE_URL}/reset", params={"task_id": task_id})
-    r.raise_for_status()
-    obs = r.json()["observation"]
+    try:
+        r = http.post(f"{ENV_BASE_URL}/reset", params={"task_id": task_id})
+        r.raise_for_status()
+        obs = r.json()["observation"]
+    except Exception as exc:
+        # Keep stdout strictly structured and send diagnostics to stderr.
+        print(f"[ERROR] reset failed for {task_id}: {exc}", file=sys.stderr, flush=True)
+        log_end(success=False, steps=0, score=0.0, rewards=[])
+        return 0.0
 
     rewards: list[float] = []
     history: list[dict[str, Any]] = []
@@ -175,6 +187,7 @@ def run_task(client: OpenAI, http: httpx.Client, task_id: str) -> float:
             result = sr.json()
         except Exception as exc:
             log_step(step=step, action=action, reward=0.0, done=True, error=str(exc))
+            done = True
             break
 
         reward = float(result["reward"]["value"])
@@ -217,11 +230,11 @@ def main() -> None:
             print("[ERROR] Env did not start.", file=sys.stderr)
             sys.exit(1)
 
-        print("[INFO] Env ready. Running tasks.", flush=True)
+        print("[INFO] Env ready. Running tasks.", file=sys.stderr, flush=True)
 
         scores: dict[str, float] = {}
         for task_id in ["task_1", "task_2", "task_3", "task_4", "task_5"]:
-            print(f"\n{'=' * 60}\n[INFO] Running {task_id}", flush=True)
+            print(f"\n{'=' * 60}\n[INFO] Running {task_id}", file=sys.stderr, flush=True)
             try:
                 scores[task_id] = run_task(client, http, task_id)
             except Exception as exc:
@@ -229,8 +242,8 @@ def main() -> None:
                 scores[task_id] = 0.0
 
         overall = round(sum(scores.values()) / len(scores), 4)
-        print("\n" + "=" * 60, flush=True)
-        print(json.dumps({"event": "SUMMARY", "scores": scores, "overall_score": overall}), flush=True)
+        print("\n" + "=" * 60, file=sys.stderr, flush=True)
+        print(json.dumps({"event": "SUMMARY", "scores": scores, "overall_score": overall}), file=sys.stderr, flush=True)
 
 
 if __name__ == "__main__":

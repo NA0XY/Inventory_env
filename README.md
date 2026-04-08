@@ -23,6 +23,8 @@ The agent acts as an AP automation system. Given invoice text, it must:
 1. **Extract** structured fields (vendor, invoice number, date, line items, amounts)
 2. **Validate** invoices against purchase orders — detect quantity/price mismatches
 3. **Detect fraud** in a batch — duplicates, unauthorized vendors, inflated amounts
+4. **Assign GL codes** for ambiguous expense line items
+5. **Reconcile statements** against internal ledgers for missing/discrepant invoices
 
 ## Observation Space
 
@@ -36,6 +38,9 @@ The agent acts as an AP automation system. Given invoice text, it must:
 | `purchase_order` | object or null | PO for task 2 |
 | `vendor_whitelist` | list or null | Approved vendors for task 3 |
 | `batch` | list or null | All 5 invoices for task 3 |
+| `chart_of_accounts` | object or null | GL mapping reference for task 4 |
+| `vendor_statement` | string or null | Raw statement text for task 5 |
+| `internal_ledger` | list or null | Internal ledger entries for task 5 |
 
 ## Action Space
 
@@ -46,14 +51,19 @@ The agent acts as an AP automation system. Given invoice text, it must:
 | `decision` | Tasks 2 & 3 | `approve` / `reject` / `flag_for_review` |
 | `mismatches` | Task 2 | list of strings |
 | `fraud_flags` | Task 3 | list of `{invoice_id, reason}` |
+| `gl_allocations` | Task 4 | object `{line_item_description: GL-XXXX}` |
+| `missing_invoices` | Task 5 | list of invoice numbers |
+| `discrepancy_invoices` | Task 5 | list of invoice numbers |
 
 ## Tasks
 
 | Task | Difficulty | Max Steps | Goal |
 |---|---|---|---|
-| `task_1` | Easy | 1 | Extract 7 fields from a clean invoice |
-| `task_2` | Medium | 3 | Validate invoice vs PO, find 3 mismatches, approve/reject |
-| `task_3` | Hard | 5 | Detect 3 fraudulent invoices in a batch of 5 |
+| `task_1` | Easy | 3 | Extract 7 fields from a noisy invoice |
+| `task_2` | Medium | 3 | Validate invoice vs PO, find 3 mismatches |
+| `task_3` | Hard | 3 | Detect 3 fraudulent invoices in a batch of 5 |
+| `task_4` | Medium | 3 | Assign GL codes for 4 line items |
+| `task_5` | Hard | 3 | Reconcile statement vs ledger |
 
 ## Reward Design
 
@@ -66,7 +76,13 @@ Max 1.0. Each of the 3 mismatches is detected via keyword matching.
 **Task 3 (fraud detection):** `F1(precision, recall) + 0.05 × correct_reasons`
 F1 across fraud IDs plus a reason bonus. Max 1.0.
 
-All rewards are partial — the agent gets signal at every step, not just at the end.
+**Task 4 (GL coding):** `0.25 × correct_gl_assignment`
+One quarter point per correctly coded line item. Max 1.0.
+
+**Task 5 (reconciliation):** `0.5 × F1(missing) + 0.5 × F1(discrepancy)`
+Balances missing-invoice detection and discrepancy detection. Max 1.0.
+
+Environment step rewards are **delta-based**: each step returns only improvement over the best score seen so far in the episode.
 
 ## Setup
 
@@ -105,10 +121,12 @@ python inference.py
 
 | Task | Score |
 |---|---|
-| Task 1 — Field Extraction | ~0.86 |
-| Task 2 — PO Validation | ~0.70 |
-| Task 3 — Fraud Detection | ~0.55 |
-| **Overall** | **~0.70** |
+| Task 1 — Field Extraction | task-dependent |
+| Task 2 — PO Validation | task-dependent |
+| Task 3 — Fraud Detection | task-dependent |
+| Task 4 — GL Coding | task-dependent |
+| Task 5 — Reconciliation | task-dependent |
+| **Overall** | **computed at runtime** |
 
 ## OpenEnv Validation
 
@@ -116,6 +134,16 @@ python inference.py
 pip install openenv-core
 openenv validate
 ```
+
+## Inference Log Compliance Check
+
+```bash
+# after running inference with redirected streams
+python tools/check_inference_logs.py --stdout stdout_check.log --stderr stderr_check.log
+```
+
+This verifies that stdout contains only strict `[START]`, `[STEP]`, and `[END]` lines,
+and that no structured lines leak into stderr.
 
 ## HF Space Deployment
 

@@ -1,0 +1,5 @@
+__pycache__/
+*.pyc
+
+stdout_check.log
+stderr_check.log
