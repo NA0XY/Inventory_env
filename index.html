@@ -3,17 +3,28 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>InvoiceProcessingEnv Demo</title>
+    <title>InvoiceProcessingEnv Benchmark</title>
     <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
     <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
     <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
     <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
     <script src="https://unpkg.com/@phosphor-icons/web"></script>
     <style>
-        body { background-color: #0B0F19; color: #f8fafc; font-family: system-ui, sans-serif; }
-        .log-container::-webkit-scrollbar { width: 8px; }
-        .log-container::-webkit-scrollbar-track { background: #111827; }
-        .log-container::-webkit-scrollbar-thumb { background: #374151; border-radius: 4px; }
+        body {
+            background-color: #f8fafc;
+            color: #0f172a;
+            font-family: 'Inter', system-ui, sans-serif;
+        }
+        .log-container::-webkit-scrollbar { width: 6px; }
+        .log-container::-webkit-scrollbar-track { background: transparent; }
+        .log-container::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 4px; }
+        .log-container::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
+
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+        .animate-fade-in { animation: fadeIn 0.4s ease-out forwards; }
     </style>
 </head>
 <body>
@@ -23,67 +34,33 @@
         const { useState, useEffect, useRef } = React;
 
         const TASKS = [
-            { id: "task_1", name: "Task 1", tag: "Extraction", desc: "Fix OCR noise and extract 7 fields." },
-            { id: "task_2", name: "Task 2", tag: "Validation", desc: "Verify quantities using Unit-of-Measure math." },
-            { id: "task_3", name: "Task 3", tag: "Fraud", desc: "Batch review with Poison Pill distractors." },
-            { id: "task_4", name: "Task 4", tag: "GL Coding", desc: "Map items to the Chart of Accounts." },
-            { id: "task_5", name: "Task 5", tag: "Reconciliation", desc: "Cross-reference Statements vs Ledgers." },
+            { id: "task_1", name: 'Task 1', tag: 'Extraction', desc: 'Fix OCR noise and extract 7 fields.' },
+            { id: "task_2", name: 'Task 2', tag: 'Validation', desc: 'Verify quantities using Unit-of-Measure math.' },
+            { id: "task_3", name: 'Task 3', tag: 'Fraud', desc: 'Batch review with Poison Pill distractors.' },
+            { id: "task_4", name: 'Task 4', tag: 'GL Coding', desc: 'Map items to the Chart of Accounts.' },
+            { id: "task_5", name: 'Task 5', tag: 'Reconciliation', desc: 'Cross-reference Statements vs Ledgers.' },
         ];
 
         const AUTOFILL_SCHEMAS = {
-            task_1: {
-                invoice_id: "INV-2024-0041",
-                extracted_fields: {
-                    vendor_name: "Apex Office Supplies Ltd.",
-                    invoice_number: "INV-2024-0041",
-                    invoice_date: "2024-03-15",
-                    line_items: [{}, {}, {}],
-                    subtotal: 1787.46,
-                    tax_amount: 151.93,
-                    total_amount: 1939.39
-                }
-            },
-            task_2: {
-                invoice_id: "INV-BSL-0112",
-                decision: "reject",
-                mismatches: ["quantity", "price", "total"]
-            },
-            task_3: {
-                invoice_id: "INV-1",
-                fraud_flags: [
-                    { invoice_id: "INV-2", reason: "amount mismatch" },
-                    { invoice_id: "INV-4", reason: "unauthorized vendor" },
-                    { invoice_id: "INV-5", reason: "duplicate" }
-                ]
-            },
-            task_4: {
-                invoice_id: "INV-GL-992",
-                gl_allocations: {
-                    "Dell XPS 15 Laptop (Engineering)": "GL-6000",
-                    "GitHub Enterprise License (Annual)": "GL-6100",
-                    "Team Pizza Lunch (Q3 Kickoff)": "GL-5000",
-                    "Printer Ink Cartridges (Cyan/Magenta)": "GL-7000"
-                }
-            },
-            task_5: {
-                invoice_id: "task5-batch",
-                missing_invoices: ["INV-8003"],
-                discrepancy_invoices: ["INV-8002"]
-            }
+            'task_1': { invoice_id: "INV-2024-0041", extracted_fields: { vendor_name: "Apex Office Supplies Ltd.", invoice_number: "INV-2024-0041", invoice_date: "2024-03-15", line_items: [{}, {}, {}], subtotal: 1787.46, tax_amount: 151.93, total_amount: 1939.39 } },
+            'task_2': { invoice_id: "INV-BSL-0112", decision: "reject", mismatches: ["quantity", "price", "total"] },
+            'task_3': { invoice_id: "INV-1", fraud_flags: [{ invoice_id: "INV-2", reason: "amount mismatch" }, { invoice_id: "INV-4", reason: "unauthorized vendor" }, { invoice_id: "INV-5", reason: "duplicate" }] },
+            'task_4': { invoice_id: "INV-GL-992", gl_allocations: { "Dell XPS 15 Laptop (Engineering)": "GL-6000", "GitHub Enterprise License (Annual)": "GL-6100", "Team Pizza Lunch (Q3 Kickoff)": "GL-5000", "Printer Ink Cartridges (Cyan/Magenta)": "GL-7000" } },
+            'task_5': { invoice_id: "task5-batch", missing_invoices: ["INV-8003"], discrepancy_invoices: ["INV-8002"] }
         };
 
         function App() {
-            const [view, setView] = useState("dashboard");
-            const [selectedTask, setSelectedTask] = useState("task_1");
-            const [customSetupInput, setCustomSetupInput] = useState("");
-            const [actionInput, setActionInput] = useState("");
+            const [view, setView] = useState('dashboard');
+            const [selectedTask, setSelectedTask] = useState('task_1');
+            const [actionInput, setActionInput] = useState('');
             const [logs, setLogs] = useState([]);
             const [isDone, setIsDone] = useState(false);
             const [loading, setLoading] = useState(false);
+            const [customSetupInput, setCustomSetupInput] = useState("");
             const logsEndRef = useRef(null);
 
             useEffect(() => {
-                logsEndRef.current?.scrollIntoView({ behavior: "smooth" });
+                logsEndRef.current?.scrollIntoView({ behavior: 'smooth' });
             }, [logs]);
 
             const startDemo = async () => {
@@ -104,10 +81,10 @@
                     }
                 }
 
-                setView("demo");
-                setLogs([{ type: "system", message: `Initializing ${selectedTask}...` }]);
+                setView('demo');
+                setLogs([{ type: 'system', message: `Initializing ${selectedTask}...` }]);
                 setIsDone(false);
-                setActionInput("");
+                setActionInput('');
                 setLoading(true);
 
                 try {
@@ -121,13 +98,13 @@
                     if (!res.ok) throw new Error(await res.text());
                     const data = await res.json();
 
-                    setLogs((prev) => [
+                    setLogs(prev => [
                         ...prev,
-                        { type: "system", message: `--- STARTED ${selectedTask.toUpperCase()} ---` },
-                        { type: "env", message: "Initial Observation", data: data.observation }
+                        { type: 'system', message: `--- STARTED ${selectedTask.toUpperCase()} ---` },
+                        { type: 'env', message: 'Initial Observation', data: data.observation }
                     ]);
                 } catch (e) {
-                    setLogs((prev) => [...prev, { type: "error", message: `Failed to reset: ${e.message}` }]);
+                    setLogs(prev => [...prev, { type: 'error', message: `Failed to reset: ${e.message}` }]);
                 } finally {
                     setLoading(false);
                 }
@@ -142,42 +119,34 @@
                     return;
                 }
 
-                setLogs((prev) => [...prev, { type: "agent", message: "Action Submitted:", data: parsedAction }]);
+                setLogs(prev => [...prev, { type: 'agent', message: 'Action Submitted', data: parsedAction }]);
                 setLoading(true);
 
                 try {
                     const res = await fetch(`/step`, {
-                        method: "POST",
-                        headers: { "Content-Type": "application/json" },
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
                         body: JSON.stringify(parsedAction)
                     });
 
                     if (!res.ok) throw new Error(await res.text());
                     const data = await res.json();
 
-                    setLogs((prev) => [
+                    setLogs(prev => [
                         ...prev,
-                        {
-                            type: "grader",
-                            message: `Reward Received: ${data.reward.value}`,
-                            success: data.reward.value > 0,
-                            data: data.reward
-                        },
-                        { type: "env", message: "Next Observation", data: data.observation }
+                        { type: 'grader', message: `Reward: ${data.reward.value.toFixed(2)}`, success: data.reward.value > 0, data: data.reward },
+                        { type: 'env', message: 'Next Observation', data: data.observation }
                     ]);
 
                     if (data.done) {
                         setIsDone(true);
-                        setLogs((prev) => [
-                            ...prev,
-                            { type: "system", message: `--- EPISODE DONE. Cumulative Reward: ${data.info.cumulative_reward} ---` }
-                        ]);
+                        setLogs(prev => [...prev, { type: 'system', message: `--- EPISODE DONE. Cumulative Reward: ${data.info.cumulative_reward.toFixed(2)} ---` }]);
                     }
                 } catch (e) {
-                    setLogs((prev) => [...prev, { type: "error", message: `Step failed: ${e.message}` }]);
+                    setLogs(prev => [...prev, { type: 'error', message: `Step failed: ${e.message}` }]);
                 } finally {
                     setLoading(false);
-                    setActionInput("");
+                    setActionInput('');
                 }
             };
 
@@ -188,58 +157,56 @@
             };
 
             const renderDashboard = () => (
-                <div className="max-w-5xl mx-auto pt-16 px-4">
-                    <div className="bg-[#111827] border border-gray-800 rounded-xl p-10 shadow-2xl">
-                        <div className="inline-block px-3 py-1 bg-blue-900/50 text-blue-400 text-xs font-bold tracking-wider rounded-full mb-6 border border-blue-800/50">
-                            OPENENV AGENT BENCHMARK
+                <div className="max-w-5xl mx-auto pt-12 px-6 pb-12 animate-fade-in">
+                    <div className="bg-white border border-slate-200 rounded-2xl p-10 shadow-sm">
+                        <div className="inline-flex items-center gap-2 px-3 py-1 bg-indigo-50 text-indigo-600 text-xs font-bold tracking-widest uppercase rounded-full mb-6 border border-indigo-100">
+                            <i className="ph-fill ph-cube"></i> OpenEnv Benchmark
                         </div>
-                        <h1 className="text-4xl font-extrabold text-white tracking-tight mb-4">InvoiceProcessingEnv</h1>
-                        <p className="text-gray-400 text-lg mb-10 max-w-3xl">
-                            5-Stage multi-turn simulation testing OCR extraction, UoM Math, Fraud detection, GL Account Coding, and Ledger Reconciliation.
+                        <h1 className="text-4xl font-extrabold text-slate-900 tracking-tight mb-4">InvoiceProcessingEnv</h1>
+                        <p className="text-slate-500 text-lg mb-10 max-w-3xl leading-relaxed">
+                            A 5-stage multi-turn simulation testing AI agents on OCR extraction, Unit-of-Measure math, fraud detection, GL account coding, and ledger reconciliation.
                         </p>
 
                         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5 mb-10">
                             {TASKS.map((task) => (
-                                <div
-                                    key={task.id}
-                                    onClick={() => setSelectedTask(task.id)}
-                                    className={`cursor-pointer border rounded-xl p-6 transition-colors ${
-                                        selectedTask === task.id
-                                            ? "bg-[#1F2937] border-blue-500 ring-1 ring-blue-500"
-                                            : "bg-[#1F2937]/50 border-gray-700/50 hover:border-gray-500"
-                                    }`}
-                                >
+                                <div key={task.id}
+                                     onClick={() => setSelectedTask(task.id)}
+                                     className={`cursor-pointer border rounded-xl p-6 transition-all duration-200 ${
+                                         selectedTask === task.id
+                                         ? 'bg-indigo-50/50 border-indigo-500 ring-1 ring-indigo-500 shadow-md transform -translate-y-0.5'
+                                         : 'bg-white border-slate-200 hover:border-indigo-300 hover:shadow-sm hover:-translate-y-0.5'
+                                     }`}>
                                     <div className="flex items-center gap-3 mb-3">
-                                        <h3 className="text-xl font-bold text-white">{task.name}</h3>
-                                        <span className="px-2.5 py-0.5 bg-gray-700 text-gray-300 text-xs font-semibold rounded">{task.tag}</span>
+                                        <h3 className="text-lg font-bold text-slate-900">{task.name}</h3>
+                                        <span className="px-2.5 py-0.5 bg-slate-100 text-slate-600 text-xs font-semibold rounded-md border border-slate-200">{task.tag}</span>
                                     </div>
-                                    <p className="text-gray-400 text-sm">{task.desc}</p>
+                                    <p className="text-slate-600 text-sm leading-relaxed">{task.desc}</p>
                                 </div>
                             ))}
                         </div>
 
-                        <div className="mb-10">
-                            <label htmlFor="custom-setup" className="block text-sm font-semibold text-gray-300 mb-2">
-                                Custom Environment Data (Optional)
+                        <div className="mb-10 p-6 bg-slate-50 rounded-xl border border-slate-200">
+                            <label htmlFor="custom-setup" className="flex items-center gap-2 text-sm font-bold text-slate-800 mb-2">
+                                <i className="ph-duotone ph-sliders-horizontal text-indigo-500 text-lg"></i> Custom Environment Data (Optional)
                             </label>
-                            <p className="text-gray-500 text-sm mb-3">
-                                Paste a JSON object to override default observation fields for the selected task.
+                            <p className="text-slate-500 text-sm mb-4">
+                                Paste a JSON object to override the default observation fields for the selected task. Leave blank to run the standard benchmark state.
                             </p>
                             <textarea
                                 id="custom-setup"
-                                className="w-full min-h-44 bg-[#0B0F19] text-cyan-300 font-mono text-sm p-4 rounded-lg border border-gray-700 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none resize-y"
+                                className="w-full min-h-[120px] bg-white text-slate-800 font-mono text-sm p-4 rounded-lg border border-slate-300 focus:border-indigo-500 focus:ring-2 focus:ring-indigo-200 outline-none resize-y transition-all shadow-sm"
                                 placeholder={"{\n  \"invoice\": {\n    \"id\": \"INV-CUSTOM-1\",\n    \"raw_text\": \"Noisy OCR text here\",\n    \"metadata\": {}\n  }\n}"}
                                 value={customSetupInput}
                                 onChange={(e) => setCustomSetupInput(e.target.value)}
                             />
                         </div>
 
-                        <div className="flex flex-wrap items-center gap-4 border-t border-gray-800 pt-8">
-                            <button onClick={startDemo} className="flex items-center gap-2 bg-blue-600 hover:bg-blue-500 text-white px-8 py-3 rounded-lg font-bold transition-all shadow-lg shadow-blue-900/20">
-                                <i className="ph-fill ph-play"></i> Run Interactive Demo
+                        <div className="flex flex-wrap items-center gap-4 pt-4 border-t border-slate-100">
+                            <button onClick={startDemo} className="flex items-center gap-2 bg-indigo-600 hover:bg-indigo-700 text-white px-8 py-3 rounded-xl font-semibold transition-all shadow-sm hover:shadow">
+                                <i className="ph-fill ph-play-circle text-lg"></i> Run Interactive Demo
                             </button>
-                            <a href="/docs" className="flex items-center gap-2 bg-[#38BDF8] hover:bg-[#38BDF8]/90 text-gray-900 px-6 py-3 rounded-lg font-bold transition-colors">
-                                Swagger UI
+                            <a href="/docs" className="flex items-center gap-2 bg-white hover:bg-slate-50 text-slate-700 border border-slate-300 px-6 py-3 rounded-xl font-semibold transition-all shadow-sm">
+                                <i className="ph-duotone ph-file-text text-lg"></i> API Docs
                             </a>
                         </div>
                     </div>
@@ -247,76 +214,96 @@
             );
 
             const renderDemo = () => (
-                <div className="max-w-7xl mx-auto h-[95vh] flex flex-col mt-4 bg-[#111827] border border-gray-800 rounded-xl overflow-hidden shadow-2xl">
-                    <div className="flex items-center justify-between px-6 py-4 border-b border-gray-800 bg-[#1F2937]">
-                        <div className="flex items-center gap-4">
-                            <button onClick={() => setView("dashboard")} className="text-gray-400 hover:text-white flex items-center gap-2 font-medium">
-                                <i className="ph ph-arrow-left"></i> Back
+                <div className="max-w-7xl mx-auto h-[95vh] flex flex-col my-4 bg-white border border-slate-200 rounded-2xl overflow-hidden shadow-xl animate-fade-in">
+                    <div className="flex items-center justify-between px-6 py-4 border-b border-slate-200 bg-slate-50/80 backdrop-blur-sm">
+                        <div className="flex items-center gap-6">
+                            <button onClick={() => setView('dashboard')} className="text-slate-500 hover:text-indigo-600 flex items-center gap-2 font-semibold transition-colors">
+                                <i className="ph-bold ph-arrow-left"></i> Exit
                             </button>
-                            <h2 className="text-xl font-bold text-white flex items-center gap-2">
-                                <i className="ph-fill ph-terminal-window text-blue-400"></i> Simulation: {TASKS.find((t) => t.id === selectedTask)?.name}
+                            <div className="h-6 w-px bg-slate-300"></div>
+                            <h2 className="text-lg font-bold text-slate-900 flex items-center gap-2">
+                                <i className="ph-duotone ph-terminal-window text-indigo-500 text-xl"></i> {TASKS.find(t => t.id === selectedTask)?.name} Session
                             </h2>
                         </div>
-                        <span className="text-sm font-medium px-3 py-1 bg-gray-800 text-gray-300 rounded-full border border-gray-700">
-                            Status: {isDone ? "Finished" : "In Progress"}
+                        <span className={`text-sm font-semibold px-3 py-1 rounded-full border ${isDone ? 'bg-emerald-50 text-emerald-700 border-emerald-200' : 'bg-blue-50 text-blue-700 border-blue-200'}`}>
+                            {isDone ? 'Episode Complete' : 'In Progress'}
                         </span>
                     </div>
 
                     <div className="flex flex-1 overflow-hidden">
-                        <div className="flex-1 min-w-0 border-r border-gray-800 flex flex-col bg-[#0B0F19]">
-                            <div className="p-4 border-b border-gray-800 bg-[#111827] text-sm font-semibold text-gray-400 uppercase tracking-wider flex items-center gap-2">
-                                <i className="ph ph-list-dashes"></i> Environment Stream
+                        <div className="flex-1 min-w-0 border-r border-slate-200 flex flex-col bg-slate-50/50">
+                            <div className="p-4 border-b border-slate-200 bg-white text-xs font-bold text-slate-500 uppercase tracking-wider flex items-center gap-2 shrink-0">
+                                <i className="ph-bold ph-activity text-slate-400"></i> Environment Log
                             </div>
-                            <div className="flex-1 p-4 overflow-y-auto log-container font-mono text-sm space-y-4">
-                                {logs.map((log, i) => (
-                                    <div
-                                        key={i}
-                                        className={`p-4 rounded-lg border ${
-                                            log.type === "system" ? "border-gray-700 bg-gray-800/50 text-gray-300" :
-                                            log.type === "env" ? "border-blue-900/50 bg-blue-900/10 text-blue-200" :
-                                            log.type === "agent" ? "border-purple-900/50 bg-purple-900/10 text-purple-200" :
-                                            log.type === "error" ? "border-red-900/50 bg-red-900/10 text-red-400" :
-                                            log.success ? "border-green-900/50 bg-green-900/10 text-green-400" : "border-yellow-900/50 bg-yellow-900/10 text-yellow-400"
-                                        }`}
-                                    >
-                                        <div className="flex items-center gap-2 mb-2 font-bold opacity-90 text-sm">
-                                            {log.type === "env" && <i className="ph ph-database"></i>}
-                                            {log.type === "agent" && <i className="ph ph-robot"></i>}
-                                            {log.type === "grader" && (log.success ? <i className="ph ph-check-circle text-green-400"></i> : <i className="ph ph-warning-circle text-yellow-400"></i>)}
-                                            {log.message}
+                            <div className="flex-1 p-5 overflow-y-auto log-container font-mono text-sm space-y-4">
+                                {logs.map((log, i) => {
+                                    let containerClass = "p-4 rounded-xl border ";
+                                    let icon = "";
+                                    let textClass = "";
+
+                                    if (log.type === 'system') {
+                                        containerClass += "border-slate-200 bg-white shadow-sm";
+                                        icon = <i className="ph-duotone ph-info text-slate-500"></i>;
+                                        textClass = "text-slate-700 font-semibold";
+                                    } else if (log.type === 'env') {
+                                        containerClass += "border-blue-200 bg-blue-50/80";
+                                        icon = <i className="ph-duotone ph-database text-blue-500"></i>;
+                                        textClass = "text-blue-900 font-bold";
+                                    } else if (log.type === 'agent') {
+                                        containerClass += "border-purple-200 bg-purple-50/80";
+                                        icon = <i className="ph-duotone ph-robot text-purple-500"></i>;
+                                        textClass = "text-purple-900 font-bold";
+                                    } else if (log.type === 'error') {
+                                        containerClass += "border-rose-200 bg-rose-50/80";
+                                        icon = <i className="ph-duotone ph-warning-circle text-rose-500"></i>;
+                                        textClass = "text-rose-900 font-bold";
+                                    } else if (log.type === 'grader') {
+                                        if (log.success) {
+                                            containerClass += "border-emerald-200 bg-emerald-50/80";
+                                            icon = <i className="ph-duotone ph-check-circle text-emerald-600"></i>;
+                                            textClass = "text-emerald-900 font-bold";
+                                        } else {
+                                            containerClass += "border-amber-200 bg-amber-50/80";
+                                            icon = <i className="ph-duotone ph-warning text-amber-600"></i>;
+                                            textClass = "text-amber-900 font-bold";
+                                        }
+                                    }
+
+                                    return (
+                                        <div key={i} className={containerClass}>
+                                            <div className={`flex items-center gap-2 mb-2 ${textClass}`}>
+                                                {icon} {log.message}
+                                            </div>
+                                            {log.data && (
+                                                <pre className="mt-3 text-xs max-w-full overflow-x-auto whitespace-pre-wrap break-all p-4 bg-slate-900 text-slate-200 rounded-lg shadow-inner">
+                                                    {JSON.stringify(log.data, null, 2)}
+                                                </pre>
+                                            )}
                                         </div>
-                                        {log.data && (
-                                            <pre className="mt-2 text-xs max-w-full overflow-x-auto whitespace-pre-wrap break-all p-3 bg-black/50 rounded border border-black/30 text-gray-300">
-                                                {JSON.stringify(log.data, null, 2)}
-                                            </pre>
-                                        )}
-                                    </div>
-                                ))}
+                                    );
+                                })}
                                 <div ref={logsEndRef} />
                             </div>
                         </div>
 
-                        <div className="w-[40%] flex-shrink-0 flex flex-col bg-[#111827]">
-                            <div className="p-4 border-b border-gray-800 flex justify-between items-center bg-[#111827]">
-                                <span className="text-sm font-semibold text-gray-400 uppercase tracking-wider flex items-center gap-2">
-                                    <i className="ph ph-code"></i> Action Payload (JSON)
+                        <div className="w-[45%] flex-shrink-0 flex flex-col bg-white">
+                            <div className="p-4 border-b border-slate-200 flex justify-between items-center bg-white shrink-0">
+                                <span className="text-xs font-bold text-slate-500 uppercase tracking-wider flex items-center gap-2">
+                                    <i className="ph-bold ph-code text-slate-400"></i> Action Payload
                                 </span>
-                                <button
-                                    onClick={autoFill}
-                                    disabled={isDone || loading}
-                                    className="text-xs flex items-center gap-1 bg-purple-900/30 text-purple-400 hover:bg-purple-900/50 px-3 py-1.5 rounded border border-purple-900/50 transition-colors disabled:opacity-50"
-                                >
-                                    <i className="ph-fill ph-magic-wand"></i> Auto-fill Schema
+                                <button onClick={autoFill} disabled={isDone || loading}
+                                        className="text-xs font-semibold flex items-center gap-1.5 bg-indigo-50 text-indigo-600 hover:bg-indigo-100 px-3 py-1.5 rounded-md border border-indigo-200 transition-colors disabled:opacity-50">
+                                    <i className="ph-bold ph-magic-wand"></i> Auto-fill Example
                                 </button>
                             </div>
 
-                            <div className="flex-1 p-4 flex flex-col gap-4">
-                                <p className="text-gray-400 text-sm">
-                                    Type your JSON action below based on the observation to the left. Hit submit to pass it to the <code>/step</code> endpoint.
+                            <div className="flex-1 p-5 flex flex-col gap-4 overflow-y-auto">
+                                <p className="text-slate-500 text-sm">
+                                    Construct the JSON payload your AI Agent would send to the <code>/step</code> endpoint based on the observation.
                                 </p>
                                 <textarea
-                                    className="flex-1 w-full bg-[#0B0F19] text-green-400 font-mono text-sm p-4 rounded-lg border border-gray-700 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none resize-none"
-                                    placeholder={"{\n  // Enter JSON action here\n}"}
+                                    className="flex-1 w-full bg-slate-50 text-slate-800 font-mono text-sm p-4 rounded-xl border border-slate-300 focus:border-indigo-500 focus:ring-2 focus:ring-indigo-200 outline-none resize-none shadow-inner transition-all"
+                                    placeholder="{\n  // Enter JSON action here\n}"
                                     value={actionInput}
                                     onChange={(e) => setActionInput(e.target.value)}
                                     disabled={isDone || loading}
@@ -325,14 +312,18 @@
                                 <button
                                     onClick={submitAction}
                                     disabled={!actionInput.trim() || isDone || loading}
-                                    className="w-full flex items-center justify-center gap-2 bg-blue-600 hover:bg-blue-500 disabled:bg-gray-700 disabled:text-gray-500 text-white px-6 py-4 rounded-lg font-bold transition-colors"
+                                    className="w-full shrink-0 flex items-center justify-center gap-2 bg-indigo-600 hover:bg-indigo-700 disabled:bg-slate-200 disabled:text-slate-400 text-white px-6 py-4 rounded-xl font-bold transition-all shadow-sm"
                                 >
-                                    {loading ? "Processing..." : "Submit Action to Env"} <i className="ph-bold ph-caret-right"></i>
+                                    {loading ? (
+                                        <><i className="ph-bold ph-spinner animate-spin"></i> Processing...</>
+                                    ) : (
+                                        <><i className="ph-bold ph-paper-plane-right"></i> Send to Environment</>
+                                    )}
                                 </button>
 
                                 {isDone && (
-                                    <button onClick={startDemo} className="w-full flex items-center justify-center gap-2 bg-gray-800 hover:bg-gray-700 text-white px-6 py-3 rounded-lg font-semibold transition-colors mt-2 border border-gray-700">
-                                        <i className="ph-bold ph-arrow-counter-clockwise"></i> Play Again
+                                    <button onClick={startDemo} className="w-full shrink-0 flex items-center justify-center gap-2 bg-white hover:bg-slate-50 text-slate-700 px-6 py-3 rounded-xl font-semibold transition-all border border-slate-300 shadow-sm mt-2">
+                                        <i className="ph-bold ph-arrow-counter-clockwise"></i> Restart Episode
                                     </button>
                                 )}
                             </div>
@@ -341,10 +332,10 @@
                 </div>
             );
 
-            return view === "dashboard" ? renderDashboard() : renderDemo();
+            return view === 'dashboard' ? renderDashboard() : renderDemo();
         }
 
-        const root = ReactDOM.createRoot(document.getElementById("root"));
+        const root = ReactDOM.createRoot(document.getElementById('root'));
         root.render(<App />);
     </script>
 </body>
