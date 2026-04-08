@@ -15,6 +15,7 @@ ENV_BASE_URL = os.environ.get("ENV_BASE_URL", "http://localhost:7860")
 BENCHMARK = "invoice-processing-env"
 MAX_STEPS = 3
 SUCCESS_THRESHOLD = 0.6
+EPSILON_SCORE = 0.01
 
 
 def _single_line(s: str) -> str:
@@ -205,7 +206,8 @@ def run_task(client: OpenAI, http: httpx.Client, task_id: str) -> float:
             break
 
     score = round(sum(rewards), 4)
-    score = min(max(score, 0.0), 1.0)
+    # Some evaluators require strict open-interval task scores: 0 < score < 1.
+    score = min(max(score, EPSILON_SCORE), 1.0 - EPSILON_SCORE)
     log_end(success=score >= SUCCESS_THRESHOLD, steps=steps_taken, score=score, rewards=rewards)
     return score
 
