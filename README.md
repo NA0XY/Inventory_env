@@ -1,3 +1,15 @@
+---
+title: InvoiceProcessingEnv
+emoji: "🧾"
+colorFrom: blue
+colorTo: indigo
+sdk: docker
+app_port: 7860
+tags:
+	- openenv
+	- finance
+---
+
 # InvoiceProcessingEnv
 
 An [OpenEnv](https://github.com/openenv) environment for training and evaluating
