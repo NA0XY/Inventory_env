@@ -1,5 +1,5 @@
 """
-inference.py - Baseline inference script for InvoiceProcessingEnv.
+inference.py - Baseline inference script with Agentic Memory capability.
 
 Environment variables required:
     API_BASE_URL   LLM API base URL  (e.g. https://api.openai.com/v1)
@@ -21,19 +21,15 @@ from typing import Any, List, Optional
 import httpx
 from openai import OpenAI
 
-# -- Config -------------------------------------------------------------------
-
 API_BASE_URL: str = os.environ.get("API_BASE_URL", "https://api.openai.com/v1")
 MODEL_NAME: str = os.environ.get("MODEL_NAME", "gpt-4o-mini")
 API_KEY: str = os.environ.get("HF_TOKEN") or os.environ.get("OPENAI_API_KEY", "")
 ENV_BASE_URL: str = os.environ.get("ENV_BASE_URL", "http://localhost:7860")
 
 BENCHMARK = "invoice-processing-env"
-MAX_STEPS = 5
+MAX_STEPS = 3
 SUCCESS_THRESHOLD = 0.6
 
-
-# -- Log helpers (REQUIRED FORMAT - do not change field names) ----------------
 
 def log_start(task: str, env: str, model: str) -> None:
     print(f"[START] task={task} env={env} model={model}", flush=True)
@@ -43,10 +39,7 @@ def log_step(step: int, action: Any, reward: float, done: bool, error: Optional[
     error_val = error if error else "null"
     done_val = str(done).lower()
     action_str = action if isinstance(action, str) else json.dumps(action)
-    print(
-        f"[STEP] step={step} action={action_str} reward={reward:.2f} done={done_val} error={error_val}",
-        flush=True,
-    )
+    print(f"[STEP] step={step} action={action_str} reward={reward:.2f} done={done_val} error={error_val}", flush=True)
 
 
 def log_end(success: bool, steps: int, score: float, rewards: List[float]) -> None:
@@ -54,16 +47,11 @@ def log_end(success: bool, steps: int, score: float, rewards: List[float]) -> No
     print(f"[END] success={str(success).lower()} steps={steps} score={score:.3f} rewards={rewards_str}", flush=True)
 
 
-# -- LLM helper ----------------------------------------------------------------
-
 def call_llm(client: OpenAI, system: str, user: str) -> str:
     try:
         resp = client.chat.completions.create(
             model=MODEL_NAME,
-            messages=[
-                {"role": "system", "content": system},
-                {"role": "user", "content": user},
-            ],
+            messages=[{"role": "system", "content": system}, {"role": "user", "content": user}],
             temperature=0.0,
             max_tokens=2000,
         )
@@ -88,13 +76,28 @@ def parse_json(text: str) -> dict:
     return {}
 
 
-# -- Action builders -----------------------------------------------------------
+def _render_history(history: list[dict[str, Any]]) -> str:
+    if not history:
+        return "No previous attempts yet."
+    lines: list[str] = []
+    for h in history:
+        lines.append(
+            f"Attempt {h['step']}: reward={h['reward']:.4f}, done={h['done']}, "
+            f"feedback={h['feedback']}, action={json.dumps(h['action'])}"
+        )
+    return "\n".join(lines)
 
-def build_action_task1(client: OpenAI, obs: dict) -> dict:
+
+def build_action_task1(client: OpenAI, obs: dict, history: list[dict[str, Any]]) -> dict:
     invoice_text = obs["invoice"]["raw_text"]
+    history_text = _render_history(history)
     raw = call_llm(
         client,
-        system="You are an expert AP clerk. Extract invoice fields and return ONLY raw JSON. No markdown.",
+        system=(
+            "You are an expert AP clerk in a self-correcting loop. "
+            "Use feedback from previous attempts to improve extraction. "
+            "Return ONLY raw JSON."
+        ),
         user=f"""Extract exactly these 7 fields and return as JSON:
 - vendor_name (string)
 - invoice_number (string)
@@ -107,28 +110,38 @@ def build_action_task1(client: OpenAI, obs: dict) -> dict:
 INVOICE:
 {invoice_text}
 
+PREVIOUS ATTEMPTS:
+{history_text}
+
 Return ONLY a JSON object with these 7 keys. Numbers must be floats.""",
     )
     fields = parse_json(raw)
     return {"invoice_id": obs["invoice"]["id"], "extracted_fields": fields}
 
 
-def build_action_task2(client: OpenAI, obs: dict) -> dict:
+def build_action_task2(client: OpenAI, obs: dict, history: list[dict[str, Any]]) -> dict:
     invoice_text = obs["invoice"]["raw_text"]
     po = obs.get("purchase_order") or {}
+    history_text = _render_history(history)
     raw = call_llm(
         client,
-        system="You are an AP auditor. Compare invoice vs PO and return ONLY raw JSON. No markdown.",
+        system=(
+            "You are an AP auditor in a self-correcting loop. "
+            "Use feedback about decision correctness and mismatch coverage. "
+            "Return ONLY raw JSON."
+        ),
         user=f"""Compare the invoice against the PO. Return JSON with:
 - decision: "approve" | "reject" | "flag_for_review"
-  (reject if total exceeds PO by >5% or material mismatch exists)
-- mismatches: list of strings describing each mismatch (quantities, prices, totals)
+- mismatches: list of strings describing each mismatch (quantities, UoM, prices, totals)
 
 INVOICE:
 {invoice_text}
 
 PURCHASE ORDER:
 {json.dumps(po, indent=2)}
+
+PREVIOUS ATTEMPTS:
+{history_text}
 
 Return ONLY JSON with keys "decision" and "mismatches".""",
     )
@@ -140,31 +153,37 @@ Return ONLY JSON with keys "decision" and "mismatches".""",
     }
 
 
-def build_action_task3(client: OpenAI, obs: dict) -> dict:
+def build_action_task3(client: OpenAI, obs: dict, history: list[dict[str, Any]]) -> dict:
     batch = obs.get("batch") or []
     whitelist = obs.get("vendor_whitelist") or []
     batch_text = "\n\n---\n\n".join(inv["raw_text"] for inv in batch)
+    history_text = _render_history(history)
     raw = call_llm(
         client,
-        system="You are a forensic AP fraud investigator. Return ONLY raw JSON. No markdown.",
-        user=f"""Review this batch of 5 invoices and identify fraudulent ones.
+        system=(
+            "You are a forensic AP fraud investigator in a self-correcting loop. "
+            "Use precision/recall feedback to adjust flags. "
+            "Return ONLY raw JSON."
+        ),
+        user=f"""Review this batch of invoices and identify fraudulent ones.
 
 Fraud types:
-1. Duplicate invoice number (same number appears more than once in batch)
-2. Total amount exceeds referenced PO approved total by more than 5%%
-3. Vendor not on the approved whitelist
-4. Any other clear fraud indicator
+1. Duplicate invoice number
+2. Total exceeds referenced PO by more than 5%%
+3. Vendor not on approved whitelist
 
 Approved vendor whitelist: {json.dumps(whitelist)}
 
 BATCH OF INVOICES:
 {batch_text}
 
-Return a JSON object:
+PREVIOUS ATTEMPTS:
+{history_text}
+
+Return JSON object:
 {{
   "fraud_flags": [
-    {{"invoice_id": "INV-BATCH-XXX", "reason": "short reason string"}},
-    ...
+    {{"invoice_id": "INV-BATCH-XXX", "reason": "short reason string"}}
   ]
 }}
 
@@ -178,17 +197,15 @@ Include ONLY fraudulent invoices. Return ONLY JSON.""",
     }
 
 
-# -- Task runner ---------------------------------------------------------------
-
 def run_task(client: OpenAI, http: httpx.Client, task_id: str) -> float:
     log_start(task=task_id, env=BENCHMARK, model=MODEL_NAME)
 
-    # Reset environment
     r = http.post(f"{ENV_BASE_URL}/reset", params={"task_id": task_id})
     r.raise_for_status()
     obs = r.json()["observation"]
 
     rewards: list[float] = []
+    memory: list[dict[str, Any]] = []
     steps_taken = 0
     done = False
 
@@ -196,15 +213,13 @@ def run_task(client: OpenAI, http: httpx.Client, task_id: str) -> float:
         if done:
             break
 
-        # Build action with LLM
         if task_id == "task_1":
-            action = build_action_task1(client, obs)
+            action = build_action_task1(client, obs, memory)
         elif task_id == "task_2":
-            action = build_action_task2(client, obs)
+            action = build_action_task2(client, obs, memory)
         else:
-            action = build_action_task3(client, obs)
+            action = build_action_task3(client, obs, memory)
 
-        # Submit to env
         try:
             sr = http.post(f"{ENV_BASE_URL}/step", json=action, timeout=30.0)
             sr.raise_for_status()
@@ -213,24 +228,33 @@ def run_task(client: OpenAI, http: httpx.Client, task_id: str) -> float:
             log_step(step=step, action=action, reward=0.0, done=True, error=str(exc))
             break
 
-        reward = result["reward"]["value"]
-        done = result["done"]
+        reward = float(result["reward"]["value"])
+        done = bool(result["done"])
         obs = result["observation"]
+        feedback = result.get("reward", {}).get("feedback") or result.get("info", {}).get("feedback", "")
+
         rewards.append(reward)
         steps_taken = step
+        memory.append(
+            {
+                "step": step,
+                "action": action,
+                "reward": reward,
+                "done": done,
+                "feedback": feedback,
+            }
+        )
 
         log_step(step=step, action=action, reward=reward, done=done, error=None)
 
         if done:
             break
 
-    score = round(sum(rewards) / max(len(rewards), 1), 4)
+    score = round(sum(rewards), 4)
     score = min(max(score, 0.0), 1.0)
     log_end(success=score >= SUCCESS_THRESHOLD, steps=steps_taken, score=score, rewards=rewards)
     return score
 
-
-# -- Entry point ---------------------------------------------------------------
 
 def main() -> None:
     if not API_KEY:
@@ -240,7 +264,6 @@ def main() -> None:
     client = OpenAI(base_url=API_BASE_URL, api_key=API_KEY)
 
     with httpx.Client(timeout=60.0) as http:
-        # Wait for env to be ready
         for attempt in range(12):
             try:
                 if http.get(f"{ENV_BASE_URL}/health").status_code == 200:

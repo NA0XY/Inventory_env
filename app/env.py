@@ -1,19 +1,13 @@
 """
-InvoiceProcessingEnv - manages episode state, dispatches graders.
+InvoiceProcessingEnv - manages episode state and computes delta-rewards.
 """
 
 from __future__ import annotations
 from typing import Optional
-from app.models import (
-    Observation, Action, Reward, StepResult, ResetResult, EnvState,
-)
+from app.models import Observation, Action, Reward, StepResult, ResetResult, EnvState
 from app.tasks import TASKS, TaskConfig
 from app.graders import grade_task_1, grade_task_2, grade_task_3
-from app.data import (
-    TASK1_INVOICE,
-    TASK2_INVOICE, TASK2_PO,
-    TASK3_INVOICES, TASK3_VENDOR_WHITELIST,
-)
+from app.data import TASK1_INVOICE, TASK2_INVOICE, TASK2_PO, TASK3_INVOICES, TASK3_VENDOR_WHITELIST
 
 
 class InvoiceProcessingEnv:
@@ -23,6 +17,7 @@ class InvoiceProcessingEnv:
         self._step_number: int = 0
         self._done: bool = False
         self._cumulative_reward: float = 0.0
+        self._best_score: float = 0.0
         self._episode_rewards: list[float] = []
 
     def reset(self, task_id: str = "task_1") -> ResetResult:
@@ -32,9 +27,9 @@ class InvoiceProcessingEnv:
         self._step_number = 0
         self._done = False
         self._cumulative_reward = 0.0
+        self._best_score = 0.0
         self._episode_rewards = []
-        obs = self._make_observation()
-        return ResetResult(observation=obs, info={"task": task_id})
+        return ResetResult(observation=self._make_observation(), info={"task": task_id})
 
     def step(self, action: Action) -> StepResult:
         if self._done:
@@ -46,34 +41,39 @@ class InvoiceProcessingEnv:
         task_id = self._task_config.task_id
 
         if task_id == "task_1":
-            reward = grade_task_1(action)
-            self._done = True
-
+            full_reward = grade_task_1(action)
         elif task_id == "task_2":
-            reward = grade_task_2(action)
-            if action.decision is not None or self._step_number >= self._task_config.max_steps:
-                self._done = True
-
+            full_reward = grade_task_2(action)
         elif task_id == "task_3":
-            reward = grade_task_3(action)
-            if self._step_number >= self._task_config.max_steps:
-                self._done = True
-
+            full_reward = grade_task_3(action)
         else:
             raise ValueError(f"Unknown task_id: {task_id}")
 
-        self._cumulative_reward = round(self._cumulative_reward + reward.value, 4)
-        self._episode_rewards.append(reward.value)
-        obs = self._make_observation()
+        # Core agentic logic: reward only incremental improvement over prior best score.
+        current_score = full_reward.value
+        step_reward_val = max(0.0, current_score - self._best_score)
+        self._best_score = max(self._best_score, current_score)
+
+        if current_score >= 1.0 or self._step_number >= self._task_config.max_steps:
+            self._done = True
+
+        self._cumulative_reward = round(self._cumulative_reward + step_reward_val, 4)
+        self._episode_rewards.append(step_reward_val)
+
+        reward_obj = Reward(
+            value=round(step_reward_val, 4),
+            breakdown=full_reward.breakdown,
+            feedback=full_reward.feedback,
+        )
 
         return StepResult(
-            observation=obs,
-            reward=reward,
+            observation=self._make_observation(),
+            reward=reward_obj,
             done=self._done,
             info={
                 "step": self._step_number,
                 "cumulative_reward": self._cumulative_reward,
-                "feedback": reward.feedback,
+                "feedback": full_reward.feedback,
             },
         )
 
@@ -91,32 +91,21 @@ class InvoiceProcessingEnv:
         cfg = self._task_config
         task_id = cfg.task_id
 
+        obs_kwargs = {
+            "task_id": task_id,
+            "task_description": cfg.description,
+            "step_number": self._step_number,
+            "total_steps": cfg.max_steps,
+        }
+
         if task_id == "task_1":
-            return Observation(
-                task_id=task_id,
-                task_description=cfg.description,
-                step_number=self._step_number,
-                total_steps=cfg.max_steps,
-                invoice=TASK1_INVOICE,
-            )
-
+            return Observation(**obs_kwargs, invoice=TASK1_INVOICE)
         if task_id == "task_2":
-            return Observation(
-                task_id=task_id,
-                task_description=cfg.description,
-                step_number=self._step_number,
-                total_steps=cfg.max_steps,
-                invoice=TASK2_INVOICE,
-                purchase_order=TASK2_PO,
-            )
-
+            return Observation(**obs_kwargs, invoice=TASK2_INVOICE, purchase_order=TASK2_PO)
         if task_id == "task_3":
             idx = min(self._step_number, len(TASK3_INVOICES) - 1)
             return Observation(
-                task_id=task_id,
-                task_description=cfg.description,
-                step_number=self._step_number,
-                total_steps=cfg.max_steps,
+                **obs_kwargs,
                 invoice=TASK3_INVOICES[idx],
                 vendor_whitelist=TASK3_VENDOR_WHITELIST,
                 batch=TASK3_INVOICES,

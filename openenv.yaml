@@ -1,19 +1,18 @@
 name: invoice-processing-env
 version: "1.0.0"
 description: >
-  A real-world accounts-payable environment where an AI agent processes
-  invoices: extracting structured fields, validating against purchase orders,
-  and detecting fraud. Three tasks of increasing difficulty with deterministic
-  graders and partial-credit rewards. Features simulated OCR noise, UoM math,
-  and poison-pill distractors.
+  A real-world accounts-payable environment testing agentic self-correction.
+  Agents process invoices, validate POs, and detect fraud. Features simulated
+  OCR noise, UoM math, and poison-pill distractors. If agents make mistakes,
+  the environment provides directional feedback, requiring multi-turn self-correction.
 author: openenv-submission
 tags:
   - openenv
   - finance
   - invoice-processing
   - fraud-detection
-  - real-world
-  - nlp
+  - self-correction
+  - agentic-loop
 
 environment:
   base_url: http://localhost:7860
@@ -23,35 +22,30 @@ environment:
 
 tasks:
   - id: "task_1"
-    name: "Field Extraction (Easy)"
+    name: "Field Extraction (Self-Correcting)"
     description: >
-      Extract 7 structured fields from a single invoice with simulated OCR noise.
-      Agent must fix the OCR errors and output correct values:
-      vendor_name, invoice_number, invoice_date, line_items (list),
-      subtotal, tax_amount, total_amount.
+      Extract 7 structured fields from a noisy OCR invoice.
+      You have 3 attempts. If incorrect, the environment will list the failing fields.
     difficulty: easy
-    max_steps: 1
+    max_steps: 3
     reward_range: [0.0, 1.0]
 
   - id: "task_2"
-    name: "PO Validation (Medium)"
+    name: "PO Validation (Self-Correcting)"
     description: >
-      Validate an invoice against a purchase order. Identify mismatches in
-      vendor name, line-item quantities (requires Unit of Measure math), prices,
-      and total amount (>5% tolerance triggers rejection). Decide: approve / reject / flag_for_review.
+      Validate an invoice vs PO (UoM math required). Identify 3 mismatches.
+      You have 3 attempts. Feedback will indicate how many mismatches you successfully found.
     difficulty: medium
     max_steps: 3
     reward_range: [0.0, 1.0]
 
   - id: "task_3"
-    name: "Fraud Detection (Hard)"
+    name: "Fraud Detection (Self-Correcting)"
     description: >
-      Review a batch of 5 invoices (legitimate, fraudulent, and "poison pill" distractors).
-      Frauds include: duplicate invoice numbers, amount inflation vs PO,
-      unauthorized vendor. Identify ALL fraudulent
-      invoices with correct reasons. Scored on F1.
+      Review a batch of 5 invoices. Find the 3 frauds. Ignore urgent/aggressive distractors.
+      You have 3 attempts. Feedback will provide your current Precision and Recall.
     difficulty: hard
-    max_steps: 5
+    max_steps: 3
     reward_range: [0.0, 1.0]
 
 observation_space:
@@ -84,32 +78,24 @@ action_space:
   fields:
     invoice_id:
       type: string
-      description: ID of the invoice being processed
     extracted_fields:
       type: object
       nullable: true
-      description: "Task 1: extracted key-value pairs"
     decision:
       type: string
       nullable: true
       enum: [approve, reject, flag_for_review]
-      description: "Tasks 2 and 3: approval decision"
     mismatches:
       type: array
       nullable: true
       items: {type: string}
-      description: "Task 2: list of mismatch descriptions found"
     fraud_flags:
       type: array
       nullable: true
-      description: "Task 3: list of {invoice_id, reason} for each suspected fraud"
 
 reward:
   type: float
   range: [0.0, 1.0]
   description: >
-    Task 1: 1/7 per correctly extracted field (exact match after normalisation).
-    Task 2: 0.4 for correct decision + 0.1 per correctly identified mismatch
-            (max 0.4) + 0.2 for zero false positives. Capped at 1.0.
-    Task 3: F1 score across all fraud flags (precision + recall averaged).
-            Bonus +0.05 for each correct fraud reason string.
+    Delta-based reward. The agent receives reward equal to the improvement over its best previous attempt.
+    Max cumulative reward is strictly 1.0.

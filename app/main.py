@@ -1,6 +1,6 @@
 """
 FastAPI app exposing the OpenEnv interface.
-Endpoints: POST /reset, POST /step, GET /state, GET /health, GET /tasks
+Endpoints: POST /reset, POST /step, GET /state, GET /health, GET /tasks, GET /metadata, GET /schema, POST /mcp
 """
 
 from __future__ import annotations
@@ -21,7 +21,7 @@ _env = InvoiceProcessingEnv()
 
 @app.get("/", response_class=HTMLResponse)
 async def root() -> str:
-        return """
+    return """
 <!doctype html>
 <html lang="en">
     <head>
@@ -122,28 +122,72 @@ async def root() -> str:
                 gap: 10px;
             }
 
-            a.btn {
+            .btn {
                 text-decoration: none;
                 border-radius: 10px;
                 padding: 10px 14px;
                 font-weight: 700;
                 transition: transform 120ms ease, box-shadow 120ms ease;
+                cursor: pointer;
+                font-size: 14px;
+                font-family: inherit;
             }
 
-            a.btn.primary {
+            .btn.primary {
                 color: #ffffff;
                 background: linear-gradient(90deg, var(--accent), var(--accent-2));
                 box-shadow: 0 6px 20px rgba(10, 147, 150, 0.34);
+                border: none;
             }
 
-            a.btn.ghost {
+            .btn.ghost {
                 color: var(--ink);
                 background: #ffffff;
                 border: 1px solid var(--line);
             }
 
-            a.btn:hover {
+            .btn:hover {
                 transform: translateY(-1px);
+            }
+
+            /* JSON Viewer Styles */
+            .json-viewer-container {
+                display: none;
+                margin-top: 22px;
+                background: #1e1e1e;
+                color: #d4d4d4;
+                border-radius: 14px;
+                padding: 16px;
+                box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+                border: 1px solid #333;
+            }
+            .json-viewer-header {
+                display: flex;
+                justify-content: space-between;
+                align-items: center;
+                border-bottom: 1px solid #444;
+                padding-bottom: 10px;
+                margin-bottom: 10px;
+            }
+            .json-viewer-header h3 {
+                margin: 0;
+                color: #569cd6;
+                font-family: monospace;
+            }
+            .close-btn {
+                background: none;
+                border: none;
+                color: #aaa;
+                cursor: pointer;
+                font-size: 16px;
+            }
+            .close-btn:hover { color: #fff; }
+            pre {
+                margin: 0;
+                overflow-x: auto;
+                font-family: "Consolas", "Monaco", monospace;
+                font-size: 13px;
+                line-height: 1.4;
             }
 
             .api {
@@ -190,28 +234,38 @@ async def root() -> str:
                 <h1>InvoiceProcessingEnv</h1>
                 <p>
                     Accounts-payable environment for invoice field extraction, PO validation,
-                    and fraud detection with deterministic grading.
+                    and fraud detection with self-correcting agent loops.
                 </p>
 
                 <div class="grid">
                     <article class="tile">
                         <h3>Task 1: Extraction</h3>
-                        <p>Extract 7 structured invoice fields from noisy OCR text.</p>
+                        <p>Extract 7 structured invoice fields from noisy OCR text. 3 attempts.</p>
                     </article>
                     <article class="tile">
                         <h3>Task 2: PO Validation</h3>
-                        <p>Compare invoice data against purchase order quantities, prices, and totals.</p>
+                        <p>Compare invoice data against PO quantities (UoM math). 3 attempts.</p>
                     </article>
                     <article class="tile">
                         <h3>Task 3: Fraud Detection</h3>
-                        <p>Detect duplicate IDs, unauthorized vendors, and inflated amounts in batch review.</p>
+                        <p>Detect duplicates, unauthorized vendors, and inflated amounts. 3 attempts.</p>
                     </article>
                 </div>
 
                 <div class="links">
                     <a class="btn primary" href="/docs">Open API Docs</a>
-                    <a class="btn ghost" href="/health">Health Check</a>
-                    <a class="btn ghost" href="/tasks">List Tasks</a>
+                    <button class="btn ghost" onclick="fetchJSON('/health')">Health Check</button>
+                    <button class="btn ghost" onclick="fetchJSON('/tasks')">List Tasks</button>
+                    <button class="btn ghost" onclick="fetchJSON('/state')">View State</button>
+                </div>
+
+                <!-- Dynamic JSON Viewer -->
+                <div id="json-viewer" class="json-viewer-container">
+                    <div class="json-viewer-header">
+                        <h3 id="json-title">GET /endpoint</h3>
+                        <button class="close-btn" onclick="closeJSON()">X</button>
+                    </div>
+                    <pre><code id="json-content"></code></pre>
                 </div>
 
                 <section class="api" aria-label="API endpoints">
@@ -254,6 +308,31 @@ async def root() -> str:
                 </section>
             </section>
         </main>
+        <script>
+            async function fetchJSON(endpoint) {
+                const viewer = document.getElementById("json-viewer");
+                const title = document.getElementById("json-title");
+                const content = document.getElementById("json-content");
+
+                title.innerText = "GET " + endpoint + " ...";
+                content.innerText = "Loading...";
+                viewer.style.display = "block";
+
+                try {
+                    const response = await fetch(endpoint);
+                    const data = await response.json();
+                    title.innerText = "GET " + endpoint;
+                    content.innerText = JSON.stringify(data, null, 2);
+                } catch (e) {
+                    title.innerText = "Error fetching " + endpoint;
+                    content.innerText = String(e);
+                }
+            }
+
+            function closeJSON() {
+                document.getElementById("json-viewer").style.display = "none";
+            }
+        </script>
     </body>
 </html>
 """
@@ -318,6 +397,7 @@ async def state() -> EnvState:
 @app.get("/tasks")
 async def list_tasks() -> dict:
     from app.tasks import TASKS
+
     return {
         tid: {
             "name": t.name,
