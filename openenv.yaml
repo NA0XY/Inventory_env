@@ -2,17 +2,17 @@ name: invoice-processing-env
 version: "1.0.0"
 description: >
   A real-world accounts-payable environment testing agentic self-correction.
-  Agents process invoices, validate POs, and detect fraud. Features simulated
-  OCR noise, UoM math, and poison-pill distractors. If agents make mistakes,
-  the environment provides directional feedback, requiring multi-turn self-correction.
+  Agents process invoices, validate POs, assign GL codes, reconcile statements,
+  and detect fraud. Features simulated OCR noise, UoM math, and poison-pill
+  distractors. Multi-turn self-correction via directional feedback.
 author: openenv-submission
 tags:
   - openenv
   - finance
   - invoice-processing
-  - fraud-detection
+  - gl-coding
+  - reconciliation
   - self-correction
-  - agentic-loop
 
 environment:
   base_url: http://localhost:7860
@@ -22,28 +22,36 @@ environment:
 
 tasks:
   - id: "task_1"
-    name: "Field Extraction (Self-Correcting)"
-    description: >
-      Extract 7 structured fields from a noisy OCR invoice.
-      You have 3 attempts. If incorrect, the environment will list the failing fields.
+    name: "Field Extraction"
+    description: "Extract 7 structured fields from a noisy OCR invoice. 3 attempts."
     difficulty: easy
     max_steps: 3
     reward_range: [0.0, 1.0]
 
   - id: "task_2"
-    name: "PO Validation (Self-Correcting)"
-    description: >
-      Validate an invoice vs PO (UoM math required). Identify 3 mismatches.
-      You have 3 attempts. Feedback will indicate how many mismatches you successfully found.
+    name: "PO Validation"
+    description: "Validate an invoice vs PO (UoM math required). Identify 3 mismatches. 3 attempts."
     difficulty: medium
     max_steps: 3
     reward_range: [0.0, 1.0]
 
   - id: "task_3"
-    name: "Fraud Detection (Self-Correcting)"
-    description: >
-      Review a batch of 5 invoices. Find the 3 frauds. Ignore urgent/aggressive distractors.
-      You have 3 attempts. Feedback will provide your current Precision and Recall.
+    name: "Fraud Detection"
+    description: "Review 5 invoices. Find 3 frauds. Ignore urgent distractors. 3 attempts."
+    difficulty: hard
+    max_steps: 3
+    reward_range: [0.0, 1.0]
+
+  - id: "task_4"
+    name: "GL Account Coding"
+    description: "Map 4 ambiguous line items to a Chart of Accounts. 3 attempts."
+    difficulty: medium
+    max_steps: 3
+    reward_range: [0.0, 1.0]
+
+  - id: "task_5"
+    name: "Statement Reconciliation"
+    description: "Cross-reference a Vendor Statement vs Internal Ledger. Find missing/discrepant invoices. 3 attempts."
     difficulty: hard
     max_steps: 3
     reward_range: [0.0, 1.0]
@@ -57,10 +65,7 @@ observation_space:
     total_steps: {type: integer}
     invoice:
       type: object
-      fields:
-        id: {type: string}
-        raw_text: {type: string}
-        metadata: {type: object}
+      nullable: true
     purchase_order:
       type: object
       nullable: true
@@ -71,7 +76,15 @@ observation_space:
     batch:
       type: array
       nullable: true
-      description: "List of invoices (task 3 only)"
+    chart_of_accounts:
+      type: object
+      nullable: true
+    vendor_statement:
+      type: string
+      nullable: true
+    internal_ledger:
+      type: array
+      nullable: true
 
 action_space:
   type: object
@@ -84,7 +97,6 @@ action_space:
     decision:
       type: string
       nullable: true
-      enum: [approve, reject, flag_for_review]
     mismatches:
       type: array
       nullable: true
@@ -92,10 +104,22 @@ action_space:
     fraud_flags:
       type: array
       nullable: true
+    gl_allocations:
+      type: object
+      nullable: true
+      description: "Task 4: Dict of {line_item_description: gl_code}"
+    missing_invoices:
+      type: array
+      nullable: true
+      items: {type: string}
+      description: "Task 5: Invoices on statement but not in ledger"
+    discrepancy_invoices:
+      type: array
+      nullable: true
+      items: {type: string}
+      description: "Task 5: Invoices with amount mismatches"
 
 reward:
   type: float
   range: [0.0, 1.0]
-  description: >
-    Delta-based reward. The agent receives reward equal to the improvement over its best previous attempt.
-    Max cumulative reward is strictly 1.0.
+  description: "Delta-based reward. Agent receives reward equal to improvement over its best previous attempt."

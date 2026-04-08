@@ -31,10 +31,13 @@ class Observation(BaseModel):
     task_description: str
     step_number: int
     total_steps: int
-    invoice: Invoice
+    invoice: Optional[Invoice] = None
     purchase_order: Optional[PurchaseOrder] = None
     vendor_whitelist: Optional[list[str]] = None
     batch: Optional[list[Invoice]] = None
+    chart_of_accounts: Optional[dict[str, str]] = None
+    vendor_statement: Optional[str] = None
+    internal_ledger: Optional[list[dict[str, Any]]] = None
 
 
 class Action(BaseModel):
@@ -43,6 +46,9 @@ class Action(BaseModel):
     decision: Optional[str] = None
     mismatches: Optional[list[str]] = None
     fraud_flags: Optional[list[dict[str, str]]] = None
+    gl_allocations: Optional[dict[str, str]] = None
+    missing_invoices: Optional[list[str]] = None
+    discrepancy_invoices: Optional[list[str]] = None
 
 
 class Reward(BaseModel):

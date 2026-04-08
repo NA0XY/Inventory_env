@@ -1,12 +1,12 @@
-"""
-Deterministic graders for all three tasks.
-Provides directional feedback to enable agentic self-correction.
-"""
-
-from __future__ import annotations
 import re
 from app.models import Action, Reward
-from app.data import TASK1_GROUND_TRUTH, TASK2_GROUND_TRUTH, TASK3_GROUND_TRUTH
+from app.data import (
+    TASK1_GROUND_TRUTH,
+    TASK2_GROUND_TRUTH,
+    TASK3_GROUND_TRUTH,
+    TASK4_GROUND_TRUTH,
+    TASK5_GROUND_TRUTH,
+)
 
 
 def _normalise(s: str) -> str:
@@ -41,11 +41,8 @@ def grade_task_1(action: Action) -> Reward:
         breakdown[field] = 1.0 if _amount_close(val, gt[field]) else 0.0
 
     score = round(sum(breakdown.values()) / 7.0, 4)
-
-    # Directional feedback (doesn't reveal correct values).
     failed_fields = [k for k, v in breakdown.items() if v < 1.0]
     feedback = "All fields correct!" if not failed_fields else f"SYSTEM REJECTION: Incorrect or missing fields: {', '.join(failed_fields)}. Please re-extract."
-
     return Reward(value=score, breakdown=breakdown, feedback=feedback)
 
 
@@ -57,30 +54,28 @@ def grade_task_2(action: Action) -> Reward:
     exp_dec = _normalise(gt["decision"])
     breakdown["decision"] = 0.4 if got_dec == exp_dec else 0.0
 
-    KEYWORD_GROUPS = [
-        ["cardboard", "box", "600", "500", "quantity", "pack", "50", "10"],
-        ["bubble", "wrap", "14", "12", "unit price", "price"],
-        ["total", "2120", "1900", "exceed", "5%"],
-    ]
-    got_mismatches = [_normalise(m) for m in (action.mismatches or [])]
+    got_mismatches = " ".join(_normalise(m) for m in (action.mismatches or []))
+    rules = {
+        "quantity": ["quantity", "600", "500", "pack", "uom"],
+        "price": ["price", "14", "12"],
+        "total": ["total", "2120", "1900", "5%", "exceed"],
+    }
 
-    mismatches_found = 0
-    for i, keywords in enumerate(KEYWORD_GROUPS):
-        matched = any(sum(kw in gm for kw in keywords) >= 2 for gm in got_mismatches)
-        breakdown[f"mismatch_{i + 1}"] = 0.2 if matched else 0.0
+    matched_count = 0
+    for name, words in rules.items():
+        matched = sum(w in got_mismatches for w in words) >= 1
+        breakdown[f"mismatch_{name}"] = 0.2 if matched else 0.0
         if matched:
-            mismatches_found += 1
+            matched_count += 1
 
     total = min(sum(breakdown.values()), 1.0)
-
     if total >= 1.0:
         feedback = "Audit passed! Perfect validation."
     else:
         feedback = (
             f"SYSTEM REJECTION: Decision was {'CORRECT' if breakdown['decision'] > 0 else 'INCORRECT'}. "
-            f"You found {mismatches_found}/3 mismatches. Check UoM math."
+            f"You found {matched_count}/3 mismatches. Check UoM math."
         )
-
     return Reward(value=round(total, 4), breakdown=breakdown, feedback=feedback)
 
 
@@ -103,13 +98,16 @@ def grade_task_3(action: Action) -> Reward:
     for f in flags:
         fid = f.get("invoice_id", "")
         reason = _normalise(f.get("reason", ""))
-        if fid in gt["fraud_reasons"]:
-            exp_words = set(_normalise(gt["fraud_reasons"][fid]).split())
-            if len(exp_words & set(reason.split())) >= 2:
-                reason_bonus += 0.05
+        if fid in gt["fraud_reasons"] and _normalise(gt["fraud_reasons"][fid]) in reason:
+            reason_bonus += 0.05
 
     score = min(round(f1 + reason_bonus, 4), 1.0)
-    breakdown = {"precision": precision, "recall": recall, "f1": f1}
+    breakdown = {
+        "precision": precision,
+        "recall": recall,
+        "f1": f1,
+        "reason_bonus": reason_bonus,
+    }
 
     if score >= 1.0:
         feedback = "Batch Review Perfect!"
@@ -118,5 +116,62 @@ def grade_task_3(action: Action) -> Reward:
             f"SYSTEM REJECTION: Precision: {precision:.2f}, Recall: {recall:.2f}. "
             f"False Positives: {fp}, Missed Frauds: {fn}. Adjust your flags."
         )
-
     return Reward(value=score, breakdown=breakdown, feedback=feedback)
+
+
+def grade_task_4(action: Action) -> Reward:
+    got_alloc = action.gl_allocations or {}
+    gt = TASK4_GROUND_TRUTH
+    breakdown: dict[str, float] = {}
+    failed_items: list[str] = []
+
+    for item, correct_gl in gt.items():
+        got_gl = next(
+            (
+                v
+                for k, v in got_alloc.items()
+                if _normalise(k) in _normalise(item) or _normalise(item) in _normalise(k)
+            ),
+            "",
+        )
+        if str(got_gl).strip().upper() == correct_gl:
+            breakdown[item] = 0.25
+        else:
+            breakdown[item] = 0.0
+            failed_items.append(item)
+
+    score = sum(breakdown.values())
+    if score == 1.0:
+        feedback = "All GL Codes perfectly allocated."
+    else:
+        feedback = f"SYSTEM REJECTION: Incorrect or missing GL codes for: {', '.join(failed_items)}."
+
+    return Reward(value=round(score, 4), breakdown=breakdown, feedback=feedback)
+
+
+def grade_task_5(action: Action) -> Reward:
+    gt = TASK5_GROUND_TRUTH
+    got_missing = set(action.missing_invoices or [])
+    got_discrep = set(action.discrepancy_invoices or [])
+
+    true_missing = set(gt["missing_invoices"])
+    true_discrep = set(gt["discrepancy_invoices"])
+
+    tp_m = len(got_missing & true_missing)
+    f1_m = (2 * tp_m) / (len(got_missing) + len(true_missing)) if (len(got_missing) + len(true_missing)) > 0 else 0.0
+
+    tp_d = len(got_discrep & true_discrep)
+    f1_d = (2 * tp_d) / (len(got_discrep) + len(true_discrep)) if (len(got_discrep) + len(true_discrep)) > 0 else 0.0
+
+    score = (f1_m * 0.5) + (f1_d * 0.5)
+
+    if score == 1.0:
+        feedback = "Reconciliation Perfect!"
+    else:
+        feedback = f"SYSTEM REJECTION: Missing F1: {f1_m:.2f}, Discrepancy F1: {f1_d:.2f}. Check the ledger closely."
+
+    return Reward(
+        value=round(score, 4),
+        breakdown={"f1_missing": f1_m, "f1_discrepancy": f1_d},
+        feedback=feedback,
+    )

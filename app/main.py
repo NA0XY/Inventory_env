@@ -1,27 +1,19 @@
-"""
-FastAPI app exposing the OpenEnv interface.
-Endpoints: POST /reset, POST /step, GET /state, GET /health, GET /tasks, GET /metadata, GET /schema, POST /mcp
-"""
-
 from __future__ import annotations
-from typing import Any
+
 from fastapi import FastAPI, HTTPException, Query
 from fastapi.responses import HTMLResponse
+from typing import Any
+
 from app.env import InvoiceProcessingEnv
 from app.models import Action, Observation, ResetResult, StepResult, EnvState
 
-app = FastAPI(
-    title="InvoiceProcessingEnv",
-    description="OpenEnv environment for AI-powered invoice processing and fraud detection.",
-    version="1.0.0",
-)
-
+app = FastAPI(title="InvoiceProcessingEnv", version="1.0.0")
 _env = InvoiceProcessingEnv()
 
 
 @app.get("/", response_class=HTMLResponse)
 async def root() -> str:
-    return """
+    return r"""
 <!doctype html>
 <html lang="en">
     <head>
@@ -29,308 +21,84 @@ async def root() -> str:
         <meta name="viewport" content="width=device-width, initial-scale=1" />
         <title>InvoiceProcessingEnv</title>
         <style>
-            :root {
-                --bg-1: #f6f8fb;
-                --bg-2: #e9eff8;
-                --ink: #152033;
-                --muted: #5f6f86;
-                --card: #ffffff;
-                --line: #d3ddeb;
-                --accent: #006d77;
-                --accent-2: #0a9396;
-            }
+            :root { --bg-1: #0f172a; --bg-2: #1e293b; --ink: #f8fafc; --card: #1e293b; --line: #334155; --accent: #38bdf8; }
+            body { margin: 0; font-family: system-ui, sans-serif; color: var(--ink); background: linear-gradient(135deg, var(--bg-1), var(--bg-2)); min-height: 100vh; }
+            .wrap { width: min(1000px, 92vw); margin: 0 auto; padding: 40px 0; }
+            .hero { background: rgba(30,41,59,0.7); border: 1px solid var(--line); border-radius: 24px; padding: 32px; backdrop-filter: blur(12px); box-shadow: 0 25px 50px -12px rgba(0,0,0,0.5); }
+            .kicker { display: inline-block; padding: 6px 12px; border-radius: 99px; font-size: 12px; font-weight: bold; background: #0ea5e920; color: #38bdf8; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 16px; }
+            h1 { margin: 0 0 12px; font-size: 2.5rem; }
+            p { color: #94a3b8; font-size: 1.1rem; line-height: 1.6; max-width: 600px; margin-top:0; }
 
-            * { box-sizing: border-box; }
+            .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 16px; margin: 32px 0; }
+            .tile { background: #0f172a; border: 1px solid var(--line); border-radius: 16px; padding: 20px; transition: transform 0.2s; }
+            .tile:hover { transform: translateY(-4px); border-color: var(--accent); }
+            .tile h3 { margin: 0 0 8px; color: #e2e8f0; display: flex; align-items: center; gap: 8px; }
+            .tile h3 span { background: #334155; padding: 2px 8px; border-radius: 6px; font-size: 12px; color: #94a3b8; }
+            .tile p { font-size: 0.9rem; color: #64748b; margin: 0; }
 
-            body {
-                margin: 0;
-                min-height: 100vh;
-                font-family: "Segoe UI", "Trebuchet MS", Arial, sans-serif;
-                color: var(--ink);
-                background:
-                    radial-gradient(circle at 15% 20%, #dce9ff 0%, transparent 34%),
-                    radial-gradient(circle at 85% 10%, #d9f5f0 0%, transparent 35%),
-                    linear-gradient(160deg, var(--bg-1), var(--bg-2));
-            }
+            .btn { text-decoration: none; border-radius: 8px; padding: 10px 16px; font-weight: 600; cursor: pointer; border: none; font-size: 14px; transition: all 0.2s; }
+            .btn-primary { background: var(--accent); color: #0f172a; }
+            .btn-primary:hover { background: #7dd3fc; }
+            .btn-ghost { background: transparent; color: #e2e8f0; border: 1px solid var(--line); }
+            .btn-ghost:hover { background: #334155; }
+            .actions { display: flex; gap: 12px; flex-wrap: wrap; }
 
-            .wrap {
-                width: min(980px, 92vw);
-                margin: 0 auto;
-                padding: 40px 0 56px;
-            }
-
-            .hero {
-                background: color-mix(in srgb, var(--card) 88%, #ffffff 12%);
-                border: 1px solid var(--line);
-                border-radius: 22px;
-                padding: 28px;
-                box-shadow: 0 12px 36px rgba(21, 32, 51, 0.1);
-            }
-
-            .kicker {
-                display: inline-block;
-                margin-bottom: 12px;
-                padding: 6px 10px;
-                border-radius: 999px;
-                font-size: 12px;
-                letter-spacing: 0.08em;
-                font-weight: 700;
-                text-transform: uppercase;
-                color: #0b4f58;
-                background: #d7f0f2;
-            }
-
-            h1 {
-                margin: 0 0 10px;
-                line-height: 1.1;
-                font-size: clamp(28px, 4.5vw, 42px);
-            }
-
-            p {
-                margin: 0;
-                color: var(--muted);
-                max-width: 72ch;
-            }
-
-            .grid {
-                margin-top: 22px;
-                display: grid;
-                grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
-                gap: 12px;
-            }
-
-            .tile {
-                background: var(--card);
-                border: 1px solid var(--line);
-                border-radius: 14px;
-                padding: 14px;
-            }
-
-            .tile h3 {
-                margin: 0 0 6px;
-                font-size: 16px;
-            }
-
-            .tile p {
-                font-size: 14px;
-            }
-
-            .links {
-                margin-top: 22px;
-                display: flex;
-                flex-wrap: wrap;
-                gap: 10px;
-            }
-
-            .btn {
-                text-decoration: none;
-                border-radius: 10px;
-                padding: 10px 14px;
-                font-weight: 700;
-                transition: transform 120ms ease, box-shadow 120ms ease;
-                cursor: pointer;
-                font-size: 14px;
-                font-family: inherit;
-            }
-
-            .btn.primary {
-                color: #ffffff;
-                background: linear-gradient(90deg, var(--accent), var(--accent-2));
-                box-shadow: 0 6px 20px rgba(10, 147, 150, 0.34);
-                border: none;
-            }
-
-            .btn.ghost {
-                color: var(--ink);
-                background: #ffffff;
-                border: 1px solid var(--line);
-            }
-
-            .btn:hover {
-                transform: translateY(-1px);
-            }
-
-            /* JSON Viewer Styles */
-            .json-viewer-container {
-                display: none;
-                margin-top: 22px;
-                background: #1e1e1e;
-                color: #d4d4d4;
-                border-radius: 14px;
-                padding: 16px;
-                box-shadow: 0 4px 12px rgba(0,0,0,0.15);
-                border: 1px solid #333;
-            }
-            .json-viewer-header {
-                display: flex;
-                justify-content: space-between;
-                align-items: center;
-                border-bottom: 1px solid #444;
-                padding-bottom: 10px;
-                margin-bottom: 10px;
-            }
-            .json-viewer-header h3 {
-                margin: 0;
-                color: #569cd6;
-                font-family: monospace;
-            }
-            .close-btn {
-                background: none;
-                border: none;
-                color: #aaa;
-                cursor: pointer;
-                font-size: 16px;
-            }
-            .close-btn:hover { color: #fff; }
-            pre {
-                margin: 0;
-                overflow-x: auto;
-                font-family: "Consolas", "Monaco", monospace;
-                font-size: 13px;
-                line-height: 1.4;
-            }
-
-            .api {
-                margin-top: 22px;
-                border-radius: 14px;
-                background: #ffffff;
-                border: 1px solid var(--line);
-                overflow: hidden;
-            }
-
-            .api table {
-                width: 100%;
-                border-collapse: collapse;
-                font-size: 14px;
-            }
-
-            .api th,
-            .api td {
-                text-align: left;
-                padding: 11px 14px;
-                border-bottom: 1px solid var(--line);
-            }
-
-            .api tr:last-child td { border-bottom: 0; }
-
-            .method {
-                display: inline-block;
-                min-width: 54px;
-                text-align: center;
-                border-radius: 6px;
-                font-size: 12px;
-                font-weight: 800;
-                padding: 3px 7px;
-            }
-
-            .get { background: #e8f8ef; color: #116636; }
-            .post { background: #e6f2ff; color: #0d4c92; }
+            /* Syntax Highlighted JSON Viewer */
+            #json-viewer { display: none; margin-top: 24px; background: #020617; border-radius: 16px; border: 1px solid var(--line); overflow: hidden; }
+            .jv-header { display: flex; justify-content: space-between; padding: 12px 20px; background: #0f172a; border-bottom: 1px solid var(--line); align-items: center; }
+            .jv-header h3 { margin: 0; font-family: monospace; color: var(--accent); font-size: 14px; }
+            .jv-close { background: none; border: none; color: #94a3b8; cursor: pointer; font-size: 18px; }
+            .jv-close:hover { color: #fff; }
+            pre { margin: 0; padding: 20px; overflow-x: auto; font-family: 'JetBrains Mono', monospace; font-size: 13px; line-height: 1.5; }
+            .string { color: #a7f3d0; } .number { color: #fde047; } .boolean { color: #f472b6; } .null { color: #94a3b8; } .key { color: #7dd3fc; font-weight: bold; }
         </style>
     </head>
     <body>
-        <main class="wrap">
-            <section class="hero">
-                <span class="kicker">OpenEnv Simulation</span>
-                <h1>InvoiceProcessingEnv</h1>
-                <p>
-                    Accounts-payable environment for invoice field extraction, PO validation,
-                    and fraud detection with self-correcting agent loops.
-                </p>
+        <div class="wrap"><div class="hero">
+            <div class="kicker">OpenEnv Agent Benchmark</div>
+            <h1>InvoiceProcessingEnv</h1>
+            <p>5-Stage multi-turn simulation testing OCR extraction, UoM Math, Fraud detection, GL Account Coding, and Ledger Reconciliation.</p>
 
-                <div class="grid">
-                    <article class="tile">
-                        <h3>Task 1: Extraction</h3>
-                        <p>Extract 7 structured invoice fields from noisy OCR text. 3 attempts.</p>
-                    </article>
-                    <article class="tile">
-                        <h3>Task 2: PO Validation</h3>
-                        <p>Compare invoice data against PO quantities (UoM math). 3 attempts.</p>
-                    </article>
-                    <article class="tile">
-                        <h3>Task 3: Fraud Detection</h3>
-                        <p>Detect duplicates, unauthorized vendors, and inflated amounts. 3 attempts.</p>
-                    </article>
-                </div>
+            <div class="grid">
+                <div class="tile"><h3>Task 1 <span>Extraction</span></h3><p>Fix OCR noise and extract 7 fields.</p></div>
+                <div class="tile"><h3>Task 2 <span>Validation</span></h3><p>Verify quantities using Unit-of-Measure math.</p></div>
+                <div class="tile"><h3>Task 3 <span>Fraud</span></h3><p>Batch review with Poison Pill distractors.</p></div>
+                <div class="tile"><h3>Task 4 <span>GL Coding</span></h3><p>Map items to the Chart of Accounts.</p></div>
+                <div class="tile"><h3>Task 5 <span>Reconciliation</span></h3><p>Cross-reference Statements vs Ledgers.</p></div>
+            </div>
 
-                <div class="links">
-                    <a class="btn primary" href="/docs">Open API Docs</a>
-                    <button class="btn ghost" onclick="fetchJSON('/health')">Health Check</button>
-                    <button class="btn ghost" onclick="fetchJSON('/tasks')">List Tasks</button>
-                    <button class="btn ghost" onclick="fetchJSON('/state')">View State</button>
-                </div>
+            <div class="actions">
+                <a href="/docs" class="btn btn-primary">Swagger UI</a>
+                <button class="btn btn-ghost" onclick="fetchEndpoint('/tasks')">View Tasks</button>
+                <button class="btn btn-ghost" onclick="fetchEndpoint('/state')">Env State</button>
+                <button class="btn btn-ghost" onclick="fetchEndpoint('/schema')">Schema</button>
+            </div>
 
-                <!-- Dynamic JSON Viewer -->
-                <div id="json-viewer" class="json-viewer-container">
-                    <div class="json-viewer-header">
-                        <h3 id="json-title">GET /endpoint</h3>
-                        <button class="close-btn" onclick="closeJSON()">X</button>
-                    </div>
-                    <pre><code id="json-content"></code></pre>
-                </div>
+            <div id="json-viewer">
+                <div class="jv-header"><h3 id="jv-title"></h3><button class="jv-close" onclick="document.getElementById('json-viewer').style.display='none'">x</button></div>
+                <pre><code id="jv-content"></code></pre>
+            </div>
+        </div></div>
 
-                <section class="api" aria-label="API endpoints">
-                    <table>
-                        <thead>
-                            <tr>
-                                <th>Method</th>
-                                <th>Endpoint</th>
-                                <th>Purpose</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            <tr>
-                                <td><span class="method get">GET</span></td>
-                                <td>/health</td>
-                                <td>Service health status</td>
-                            </tr>
-                            <tr>
-                                <td><span class="method get">GET</span></td>
-                                <td>/tasks</td>
-                                <td>Task catalog and constraints</td>
-                            </tr>
-                            <tr>
-                                <td><span class="method post">POST</span></td>
-                                <td>/reset</td>
-                                <td>Start task episode</td>
-                            </tr>
-                            <tr>
-                                <td><span class="method post">POST</span></td>
-                                <td>/step</td>
-                                <td>Submit agent action and receive reward</td>
-                            </tr>
-                            <tr>
-                                <td><span class="method get">GET</span></td>
-                                <td>/state</td>
-                                <td>Current environment state</td>
-                            </tr>
-                        </tbody>
-                    </table>
-                </section>
-            </section>
-        </main>
         <script>
-            async function fetchJSON(endpoint) {
-                const viewer = document.getElementById("json-viewer");
-                const title = document.getElementById("json-title");
-                const content = document.getElementById("json-content");
-
-                title.innerText = "GET " + endpoint + " ...";
-                content.innerText = "Loading...";
-                viewer.style.display = "block";
-
-                try {
-                    const response = await fetch(endpoint);
-                    const data = await response.json();
-                    title.innerText = "GET " + endpoint;
-                    content.innerText = JSON.stringify(data, null, 2);
-                } catch (e) {
-                    title.innerText = "Error fetching " + endpoint;
-                    content.innerText = String(e);
-                }
+            function syntaxHighlight(json) {
+                json = json.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+                return json.replace(/("(\\u[a-zA-Z0-9]{4}|\\[^u]|[^\\"])*"(\\s*:)?|\\b(true|false|null)\\b|-?\d+(?:\.\d*)?(?:[eE][+\-]?\d+)?)/g, function (match) {
+                    var cls = 'number';
+                    if (/^"/.test(match)) {
+                        if (/:$/.test(match)) { cls = 'key'; } else { cls = 'string'; }
+                    } else if (/true|false/.test(match)) { cls = 'boolean'; } else if (/null/.test(match)) { cls = 'null'; }
+                    return '<span class="' + cls + '">' + match + '</span>';
+                });
             }
-
-            function closeJSON() {
-                document.getElementById("json-viewer").style.display = "none";
+            async function fetchEndpoint(path) {
+                document.getElementById('json-viewer').style.display = 'block';
+                document.getElementById('jv-title').innerText = 'GET ' + path;
+                document.getElementById('jv-content').innerHTML = '<span style="color:#94a3b8">Loading...</span>';
+                try {
+                    const r = await fetch(path); const d = await r.json();
+                    document.getElementById('jv-content').innerHTML = syntaxHighlight(JSON.stringify(d, null, 2));
+                } catch(e) { document.getElementById('jv-content').innerText = String(e); }
             }
         </script>
     </body>
@@ -366,10 +134,7 @@ async def mcp(payload: dict[str, Any]) -> dict[str, Any]:
     return {
         "jsonrpc": "2.0",
         "id": payload.get("id"),
-        "result": {
-            "status": "ok",
-            "message": "InvoiceProcessingEnv MCP endpoint is reachable.",
-        },
+        "result": {"status": "ok", "message": "InvoiceProcessingEnv MCP endpoint is reachable."},
     }
 
 
@@ -397,7 +162,6 @@ async def state() -> EnvState:
 @app.get("/tasks")
 async def list_tasks() -> dict:
     from app.tasks import TASKS
-
     return {
         tid: {
             "name": t.name,
