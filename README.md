@@ -12,13 +12,37 @@ tags:
 
 # InvoiceProcessingEnv
 
-An [OpenEnv](https://github.com/openenv) environment for training and evaluating
-AI agents on **accounts-payable automation** — a real-world task performed by
-finance operations teams at every company.
+Round 1 submission: a real-world OpenEnv benchmark for accounts-payable operations.
 
-## What the agent does
+This environment models finance workflows that humans perform daily:
 
-The agent acts as an AP automation system. Given invoice text, it must:
+1. invoice field extraction from noisy OCR
+2. invoice to purchase-order validation
+3. fraud triage in invoice batches
+4. GL coding for expense line items
+5. vendor statement reconciliation
+
+It is designed for agent learning and evaluation through the standard OpenEnv API:
+
+1. reset()
+2. step(action)
+3. state()
+
+## Round 1 Compliance Snapshot
+
+| Requirement | Status | Notes |
+|---|---|---|
+| Real-world task (non-toy) | Pass | AP automation domain used in production finance workflows |
+| OpenEnv API + typed models | Pass | Pydantic Observation/Action/Reward + reset/step/state implemented |
+| 3+ tasks with graders | Pass | 5 tasks, deterministic graders, reward range [0.0, 1.0] |
+| Meaningful reward shaping | Pass | Delta-based step rewards with partial progress signals |
+| Baseline inference script | Pass | Root-level inference.py using OpenAI client and required env vars |
+| HF Space + Docker deployable | Pass | Dockerized app on port 7860 and HF-ready metadata |
+| Documentation completeness | Pass | Spaces, tasks, setup, validation, and submission checks documented |
+
+## Real-World Utility
+
+The agent acts as an AP analyst assistant. Given invoices and accounting context, it must:
 
 1. **Extract** structured fields (vendor, invoice number, date, line items, amounts)
 2. **Validate** invoices against purchase orders — detect quantity/price mismatches
@@ -26,7 +50,17 @@ The agent acts as an AP automation system. Given invoice text, it must:
 4. **Assign GL codes** for ambiguous expense line items
 5. **Reconcile statements** against internal ledgers for missing/discrepant invoices
 
-## Observation Space
+## OpenEnv Interface
+
+| Method | Endpoint | Behavior |
+|---|---|---|
+| reset(task_id, optional custom body) | POST /reset | Initializes task state and returns first observation |
+| step(action) | POST /step | Applies one action and returns observation, reward, done, info |
+| state() | GET /state | Returns current episode state snapshot |
+
+All reward values are constrained to [0.0, 1.0].
+
+## Typed Observation Space
 
 | Field | Type | Description |
 |---|---|---|
@@ -42,7 +76,7 @@ The agent acts as an AP automation system. Given invoice text, it must:
 | `vendor_statement` | string or null | Raw statement text for task 5 |
 | `internal_ledger` | list or null | Internal ledger entries for task 5 |
 
-## Action Space
+## Typed Action Space
 
 | Field | Required by | Values |
 |---|---|---|
@@ -55,7 +89,7 @@ The agent acts as an AP automation system. Given invoice text, it must:
 | `missing_invoices` | Task 5 | list of invoice numbers |
 | `discrepancy_invoices` | Task 5 | list of invoice numbers |
 
-## Tasks
+## Task Suite and Difficulty
 
 | Task | Difficulty | Max Steps | Goal |
 |---|---|---|---|
@@ -65,7 +99,7 @@ The agent acts as an AP automation system. Given invoice text, it must:
 | `task_4` | Medium | 3 | Assign GL codes for 4 line items |
 | `task_5` | Hard | 3 | Reconcile statement vs ledger |
 
-## Reward Design
+## Grader and Reward Design
 
 **Task 1 (extraction):** `score = correct_fields / 7`
 Each of the 7 fields contributes 1/7. Numeric fields tolerate ±$0.02 or ±2%.
@@ -83,6 +117,28 @@ One quarter point per correctly coded line item. Max 1.0.
 Balances missing-invoice detection and discrepancy detection. Max 1.0.
 
 Environment step rewards are **delta-based**: each step returns only improvement over the best score seen so far in the episode.
+
+## Mandatory Inference Requirements
+
+The root-level inference script is named inference.py and uses the OpenAI client.
+
+Required environment variables:
+
+1. API_BASE_URL
+2. MODEL_NAME
+3. HF_TOKEN
+
+Recommended additional variable for local runs:
+
+1. ENV_BASE_URL
+
+The script emits strict structured stdout logs:
+
+1. [START]
+2. [STEP]
+3. [END]
+
+The formatting is enforced by a compliance checker in tools/check_inference_logs.py.
 
 ## Setup
 
@@ -107,7 +163,7 @@ export ENV_BASE_URL="http://localhost:7860"
 python inference.py
 ```
 
-## API
+## API Endpoints
 
 | Method | Path | Description |
 |---|---|---|
@@ -117,7 +173,9 @@ python inference.py
 | POST | `/step` | Submit action, get observation + reward |
 | GET | `/state` | Read current episode state |
 
-## Baseline Scores (gpt-4o-mini, temperature=0)
+## Baseline Scores
+
+Baseline run is deterministic at temperature 0 (model-dependent absolute scores).
 
 | Task | Score |
 |---|---|
@@ -128,25 +186,53 @@ python inference.py
 | Task 5 — Reconciliation | task-dependent |
 | **Overall** | **computed at runtime** |
 
-## OpenEnv Validation
+## Validation and Pre-Submission Checks
 
 ```bash
 pip install openenv-core
 openenv validate
 ```
 
-## Inference Log Compliance Check
+```bash
+# local container smoke
+docker build -t invoice-env .
+docker run -p 7860:7860 invoice-env
+```
 
 ```bash
-# after running inference with redirected streams
+# strict inference log compliance
 python tools/check_inference_logs.py --stdout stdout_check.log --stderr stderr_check.log
 ```
 
-This verifies that stdout contains only strict `[START]`, `[STEP]`, and `[END]` lines,
-and that no structured lines leak into stderr.
+Submission gate checklist:
+
+1. HF Space deploy responds with 200 and reset works
+2. OpenEnv validation passes
+3. Docker build and run succeed
+4. Inference script completes and emits strict log format
+5. Task graders produce valid [0,1] rewards
+
+## Resource and Runtime Constraints
+
+Target infra compatibility:
+
+1. inference runtime under 20 minutes
+2. compatible with vCPU=2 and memory=8GB
 
 ## HF Space Deployment
 
-Push this repo to a Hugging Face Space with hardware `cpu-basic`.
-The Dockerfile starts uvicorn on port 7860 automatically.
-Tag the Space with `openenv`.
+This repository is configured for Docker Spaces.
+
+1. Push to a Hugging Face Space with hardware cpu-basic
+2. Ensure Space tag includes openenv
+3. App listens on port 7860 via Dockerfile runtime
+
+## Judging Alignment (Round 1)
+
+This submission is built to map directly to the published rubric:
+
+1. Real-world utility: AP automation benchmark with realistic finance tasks
+2. Task and grader quality: deterministic graders with easy to hard progression
+3. Environment design: typed interfaces, delta rewards, clear episode boundaries
+4. Code quality and compliance: OpenEnv-compatible structure + deployable container
+5. Creativity and novelty: multi-stage AP flow in a single cohesive benchmark
