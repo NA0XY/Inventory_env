@@ -204,6 +204,8 @@ docker run -p 7860:7860 invoice-env
 python tools/check_inference_logs.py --stdout stdout_check.log --stderr stderr_check.log
 ```
 
+For the full submission gate, run [scripts/validate-submission.sh](scripts/validate-submission.sh) against your deployed Space URL.
+
 Submission gate checklist:
 
 1. HF Space deploy responds with 200 and reset works

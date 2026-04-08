@@ -1,6 +1,9 @@
 from __future__ import annotations
 
 import os
+import shutil
+import subprocess
+from pathlib import Path
 
 from fastapi import Body, FastAPI, HTTPException, Query
 from fastapi.responses import HTMLResponse
@@ -11,6 +14,7 @@ from app.models import Action, Observation, ResetResult, StepResult, EnvState
 
 app = FastAPI(title="InvoiceProcessingEnv", version="1.0.0")
 _env = InvoiceProcessingEnv()
+_repo_root = Path(__file__).resolve().parent.parent
 
 
 @app.get("/", response_class=HTMLResponse)
@@ -90,4 +94,68 @@ async def list_tasks() -> dict:
             "max_steps": t.max_steps,
         }
         for tid, t in TASKS.items()
+    }
+
+
+@app.post("/validate-submission")
+async def validate_submission() -> dict[str, Any]:
+    checks: list[dict[str, Any]] = []
+
+    try:
+        _env.reset(task_id="task_1")
+        checks.append({"name": "HF Space is live and responds to /reset", "passed": True, "detail": "POST /reset succeeded for task_1"})
+    except Exception as exc:
+        checks.append({"name": "HF Space is live and responds to /reset", "passed": False, "detail": str(exc)})
+
+    docker_path = shutil.which("docker")
+    if not docker_path:
+        checks.append({"name": "Docker build succeeded", "passed": False, "detail": "docker command not found in this environment"})
+    else:
+        try:
+            build = subprocess.run(
+                [docker_path, "build", str(_repo_root)],
+                cwd=_repo_root,
+                capture_output=True,
+                text=True,
+                timeout=600,
+                check=False,
+            )
+            passed = build.returncode == 0
+            detail = (build.stdout or build.stderr or "").strip()
+            checks.append({
+                "name": "Docker build succeeded",
+                "passed": passed,
+                "detail": detail[-1000:] if detail else "docker build completed",
+            })
+        except Exception as exc:
+            checks.append({"name": "Docker build succeeded", "passed": False, "detail": str(exc)})
+
+    openenv_path = shutil.which("openenv")
+    if not openenv_path:
+        checks.append({"name": "openenv validate passed", "passed": False, "detail": "openenv command not found in this environment"})
+    else:
+        try:
+            validate = subprocess.run(
+                [openenv_path, "validate"],
+                cwd=_repo_root,
+                capture_output=True,
+                text=True,
+                timeout=120,
+                check=False,
+            )
+            passed = validate.returncode == 0
+            detail = (validate.stdout or validate.stderr or "").strip()
+            checks.append({
+                "name": "openenv validate passed",
+                "passed": passed,
+                "detail": detail[-1000:] if detail else "openenv validate completed",
+            })
+        except Exception as exc:
+            checks.append({"name": "openenv validate passed", "passed": False, "detail": str(exc)})
+
+    all_passed = all(check["passed"] for check in checks)
+    return {
+        "all_passed": all_passed,
+        "summary": "All 3/3 checks passed!" if all_passed else "One or more checks failed.",
+        "checks": checks,
     }
