@@ -263,7 +263,7 @@
                     </div>
 
                     <div className="flex flex-1 overflow-hidden">
-                        <div className="flex-1 border-r border-gray-800 flex flex-col bg-[#0B0F19]">
+                        <div className="flex-1 min-w-0 border-r border-gray-800 flex flex-col bg-[#0B0F19]">
                             <div className="p-4 border-b border-gray-800 bg-[#111827] text-sm font-semibold text-gray-400 uppercase tracking-wider flex items-center gap-2">
                                 <i className="ph ph-list-dashes"></i> Environment Stream
                             </div>
@@ -286,7 +286,7 @@
                                             {log.message}
                                         </div>
                                         {log.data && (
-                                            <pre className="mt-2 text-xs overflow-x-auto p-3 bg-black/50 rounded border border-black/30 text-gray-300">
+                                            <pre className="mt-2 text-xs max-w-full overflow-x-auto whitespace-pre-wrap break-all p-3 bg-black/50 rounded border border-black/30 text-gray-300">
                                                 {JSON.stringify(log.data, null, 2)}
                                             </pre>
                                         )}
@@ -296,7 +296,7 @@
                             </div>
                         </div>
 
-                        <div className="w-[40%] flex flex-col bg-[#111827]">
+                        <div className="w-[40%] flex-shrink-0 flex flex-col bg-[#111827]">
                             <div className="p-4 border-b border-gray-800 flex justify-between items-center bg-[#111827]">
                                 <span className="text-sm font-semibold text-gray-400 uppercase tracking-wider flex items-center gap-2">
                                     <i className="ph ph-code"></i> Action Payload (JSON)
