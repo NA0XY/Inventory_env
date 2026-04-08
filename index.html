@@ -57,8 +57,6 @@
             const [isDone, setIsDone] = useState(false);
             const [loading, setLoading] = useState(false);
             const [customSetupInput, setCustomSetupInput] = useState("");
-            const [validationLoading, setValidationLoading] = useState(false);
-            const [validationResult, setValidationResult] = useState(null);
             const logsEndRef = useRef(null);
 
             useEffect(() => {
@@ -158,26 +156,6 @@
                 }
             };
 
-            const runSubmissionChecks = async () => {
-                setValidationLoading(true);
-                setValidationResult(null);
-
-                try {
-                    const res = await fetch('/validate-submission', { method: 'POST' });
-                    if (!res.ok) throw new Error(await res.text());
-                    const data = await res.json();
-                    setValidationResult(data);
-                } catch (e) {
-                    setValidationResult({
-                        all_passed: false,
-                        summary: `Validation failed to run: ${e.message}`,
-                        checks: [],
-                    });
-                } finally {
-                    setValidationLoading(false);
-                }
-            };
-
             const renderDashboard = () => (
                 <div className="max-w-5xl mx-auto pt-12 px-6 pb-12 animate-fade-in">
                     <div className="bg-white border border-slate-200 rounded-2xl p-10 shadow-sm">
@@ -221,58 +199,6 @@
                                 value={customSetupInput}
                                 onChange={(e) => setCustomSetupInput(e.target.value)}
                             />
-                        </div>
-
-                        <div className="mb-10 p-6 bg-emerald-50 rounded-xl border border-emerald-200">
-                            <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
-                                <div>
-                                    <h3 className="text-sm font-bold text-emerald-900 flex items-center gap-2">
-                                        <i className="ph-fill ph-check-circle text-emerald-600 text-lg"></i> Submission Validation
-                                    </h3>
-                                    <p className="text-sm text-emerald-700 mt-1">
-                                        Run the submission checks from the UI and view the result summary here.
-                                    </p>
-                                </div>
-                                <button
-                                    onClick={runSubmissionChecks}
-                                    disabled={validationLoading}
-                                    className="inline-flex items-center justify-center gap-2 bg-emerald-600 hover:bg-emerald-700 disabled:bg-emerald-400 text-white px-5 py-3 rounded-xl font-semibold transition-all shadow-sm"
-                                >
-                                    {validationLoading ? (
-                                        <><i className="ph-bold ph-spinner animate-spin"></i> Running Checks...</>
-                                    ) : (
-                                        <><i className="ph-bold ph-play-circle"></i> Run Submission Validator</>
-                                    )}
-                                </button>
-                            </div>
-
-                            {validationResult && (
-                                <div className={`mt-4 rounded-xl border p-4 ${validationResult.all_passed ? 'bg-white border-emerald-200' : 'bg-white border-rose-200'}`}>
-                                    <div className="flex items-center gap-2 flex-wrap">
-                                        <div className={`text-sm font-bold ${validationResult.all_passed ? 'text-emerald-700' : 'text-rose-700'}`}>
-                                            {validationResult.summary}
-                                        </div>
-                                        {validationResult.all_passed && (
-                                            <span className="inline-flex items-center gap-1 rounded-full border border-emerald-200 bg-emerald-50 px-3 py-1 text-xs font-bold text-emerald-700">
-                                                <i className="ph-fill ph-check-circle"></i> All checks passed
-                                            </span>
-                                        )}
-                                    </div>
-                                    <div className="mt-3 space-y-2">
-                                        {validationResult.checks.map((check, index) => (
-                                            <div key={index} className="flex items-start gap-3 text-sm">
-                                                <span className={`mt-0.5 inline-flex h-5 w-5 items-center justify-center rounded-full ${check.passed ? 'bg-emerald-100 text-emerald-700' : 'bg-rose-100 text-rose-700'}`}>
-                                                    {check.passed ? '✓' : '×'}
-                                                </span>
-                                                <div>
-                                                    <div className="font-semibold text-slate-900">{check.name}</div>
-                                                    <div className="text-slate-600 break-words">{check.detail}</div>
-                                                </div>
-                                            </div>
-                                        ))}
-                                    </div>
-                                </div>
-                            )}
                         </div>
 
                         <div className="flex flex-wrap items-center gap-4 pt-4 border-t border-slate-100">
