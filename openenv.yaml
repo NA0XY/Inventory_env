@@ -1,0 +1,115 @@
+name: invoice-processing-env
+version: "1.0.0"
+description: >
+  A real-world accounts-payable environment where an AI agent processes
+  invoices: extracting structured fields, validating against purchase orders,
+  and detecting fraud. Three tasks of increasing difficulty with deterministic
+  graders and partial-credit rewards. Features simulated OCR noise, UoM math,
+  and poison-pill distractors.
+author: openenv-submission
+tags:
+  - openenv
+  - finance
+  - invoice-processing
+  - fraud-detection
+  - real-world
+  - nlp
+
+environment:
+  base_url: http://localhost:7860
+  reset_endpoint: /reset
+  step_endpoint: /step
+  state_endpoint: /state
+
+tasks:
+  - id: "task_1"
+    name: "Field Extraction (Easy)"
+    description: >
+      Extract 7 structured fields from a single invoice with simulated OCR noise.
+      Agent must fix the OCR errors and output correct values:
+      vendor_name, invoice_number, invoice_date, line_items (list),
+      subtotal, tax_amount, total_amount.
+    difficulty: easy
+    max_steps: 1
+    reward_range: [0.0, 1.0]
+
+  - id: "task_2"
+    name: "PO Validation (Medium)"
+    description: >
+      Validate an invoice against a purchase order. Identify mismatches in
+      vendor name, line-item quantities (requires Unit of Measure math), prices,
+      and total amount (>5% tolerance triggers rejection). Decide: approve / reject / flag_for_review.
+    difficulty: medium
+    max_steps: 3
+    reward_range: [0.0, 1.0]
+
+  - id: "task_3"
+    name: "Fraud Detection (Hard)"
+    description: >
+      Review a batch of 5 invoices (legitimate, fraudulent, and "poison pill" distractors).
+      Frauds include: duplicate invoice numbers, amount inflation vs PO,
+      unauthorized vendor. Identify ALL fraudulent
+      invoices with correct reasons. Scored on F1.
+    difficulty: hard
+    max_steps: 5
+    reward_range: [0.0, 1.0]
+
+observation_space:
+  type: object
+  fields:
+    task_id: {type: string}
+    task_description: {type: string}
+    step_number: {type: integer}
+    total_steps: {type: integer}
+    invoice:
+      type: object
+      fields:
+        id: {type: string}
+        raw_text: {type: string}
+        metadata: {type: object}
+    purchase_order:
+      type: object
+      nullable: true
+    vendor_whitelist:
+      type: array
+      items: {type: string}
+      nullable: true
+    batch:
+      type: array
+      nullable: true
+      description: "List of invoices (task 3 only)"
+
+action_space:
+  type: object
+  fields:
+    invoice_id:
+      type: string
+      description: ID of the invoice being processed
+    extracted_fields:
+      type: object
+      nullable: true
+      description: "Task 1: extracted key-value pairs"
+    decision:
+      type: string
+      nullable: true
+      enum: [approve, reject, flag_for_review]
+      description: "Tasks 2 and 3: approval decision"
+    mismatches:
+      type: array
+      nullable: true
+      items: {type: string}
+      description: "Task 2: list of mismatch descriptions found"
+    fraud_flags:
+      type: array
+      nullable: true
+      description: "Task 3: list of {invoice_id, reason} for each suspected fraud"
+
+reward:
+  type: float
+  range: [0.0, 1.0]
+  description: >
+    Task 1: 1/7 per correctly extracted field (exact match after normalisation).
+    Task 2: 0.4 for correct decision + 0.1 per correctly identified mismatch
+            (max 0.4) + 0.2 for zero false positives. Capped at 1.0.
+    Task 3: F1 score across all fraud flags (precision + recall averaged).
+            Bonus +0.05 for each correct fraud reason string.
