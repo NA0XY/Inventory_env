@@ -131,21 +131,24 @@ Return ONLY JSON with gl_allocations as {{line_item: GL-XXXX}}.""",
         parsed = parse_json(raw)
         return {"invoice_id": obs["invoice"]["id"], "gl_allocations": parsed.get("gl_allocations", {})}
 
-    raw = call_llm(
-        client,
-        "You are a reconciliation analyst in a self-correction loop. Return ONLY JSON.",
-        f"""Find missing and discrepant invoices.
+    if task_id == "task_5":
+        raw = call_llm(
+            client,
+            "You are a reconciliation analyst in a self-correction loop. Return ONLY JSON.",
+            f"""Find missing and discrepant invoices.
 Vendor Statement:\n{obs.get('vendor_statement')}
 Internal Ledger:\n{json.dumps(obs.get('internal_ledger') or [], indent=2)}
 History:\n{history_text}
 Return ONLY JSON with keys missing_invoices and discrepancy_invoices.""",
-    )
-    parsed = parse_json(raw)
-    return {
-        "invoice_id": "task5-batch",
-        "missing_invoices": parsed.get("missing_invoices", []),
-        "discrepancy_invoices": parsed.get("discrepancy_invoices", []),
-    }
+        )
+        parsed = parse_json(raw)
+        return {
+            "invoice_id": "task5-batch",
+            "missing_invoices": parsed.get("missing_invoices", []),
+            "discrepancy_invoices": parsed.get("discrepancy_invoices", []),
+        }
+
+    raise ValueError(f"Unsupported task_id: {task_id}")
 
 
 def run_task(client: OpenAI, http: httpx.Client, task_id: str) -> float:

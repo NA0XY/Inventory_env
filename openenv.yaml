@@ -75,6 +75,7 @@ observation_space:
       nullable: true
     batch:
       type: array
+      items: {type: object}
       nullable: true
     chart_of_accounts:
       type: object
@@ -84,6 +85,7 @@ observation_space:
       nullable: true
     internal_ledger:
       type: array
+      items: {type: object}
       nullable: true
 
 action_space:
@@ -103,6 +105,7 @@ action_space:
       items: {type: string}
     fraud_flags:
       type: array
+      items: {type: object}
       nullable: true
     gl_allocations:
       type: object
