@@ -75,6 +75,7 @@
         function App() {
             const [view, setView] = useState("dashboard");
             const [selectedTask, setSelectedTask] = useState("task_1");
+            const [customSetupInput, setCustomSetupInput] = useState("");
             const [actionInput, setActionInput] = useState("");
             const [logs, setLogs] = useState([]);
             const [isDone, setIsDone] = useState(false);
@@ -86,6 +87,23 @@
             }, [logs]);
 
             const startDemo = async () => {
+                const customDataRaw = customSetupInput.trim();
+                let parsedCustomData = null;
+
+                if (customDataRaw) {
+                    try {
+                        parsedCustomData = JSON.parse(customDataRaw);
+                    } catch (e) {
+                        alert("Invalid JSON in Custom Environment Data. Please fix it before starting the demo.");
+                        return;
+                    }
+
+                    if (parsedCustomData === null || Array.isArray(parsedCustomData) || typeof parsedCustomData !== "object") {
+                        alert("Custom Environment Data must be a JSON object.");
+                        return;
+                    }
+                }
+
                 setView("demo");
                 setLogs([{ type: "system", message: `Initializing ${selectedTask}...` }]);
                 setIsDone(false);
@@ -93,7 +111,13 @@
                 setLoading(true);
 
                 try {
-                    const res = await fetch(`/reset?task_id=${selectedTask}`, { method: "POST" });
+                    const resetRequest = { method: "POST" };
+                    if (parsedCustomData !== null) {
+                        resetRequest.headers = { "Content-Type": "application/json" };
+                        resetRequest.body = JSON.stringify(parsedCustomData);
+                    }
+
+                    const res = await fetch(`/reset?task_id=${selectedTask}`, resetRequest);
                     if (!res.ok) throw new Error(await res.text());
                     const data = await res.json();
 
@@ -192,6 +216,22 @@
                                     <p className="text-gray-400 text-sm">{task.desc}</p>
                                 </div>
                             ))}
+                        </div>
+
+                        <div className="mb-10">
+                            <label htmlFor="custom-setup" className="block text-sm font-semibold text-gray-300 mb-2">
+                                Custom Environment Data (Optional)
+                            </label>
+                            <p className="text-gray-500 text-sm mb-3">
+                                Paste a JSON object to override default observation fields for the selected task.
+                            </p>
+                            <textarea
+                                id="custom-setup"
+                                className="w-full min-h-44 bg-[#0B0F19] text-cyan-300 font-mono text-sm p-4 rounded-lg border border-gray-700 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none resize-y"
+                                placeholder={"{\n  \"invoice\": {\n    \"id\": \"INV-CUSTOM-1\",\n    \"raw_text\": \"Noisy OCR text here\",\n    \"metadata\": {}\n  }\n}"}
+                                value={customSetupInput}
+                                onChange={(e) => setCustomSetupInput(e.target.value)}
+                            />
                         </div>
 
                         <div className="flex flex-wrap items-center gap-4 border-t border-gray-800 pt-8">

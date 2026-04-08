@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import os
 
-from fastapi import FastAPI, HTTPException, Query
+from fastapi import Body, FastAPI, HTTPException, Query
 from fastapi.responses import HTMLResponse
 from typing import Any
 
@@ -56,9 +56,12 @@ async def mcp(payload: dict[str, Any]) -> dict[str, Any]:
 
 
 @app.post("/reset", response_model=ResetResult)
-async def reset(task_id: str = Query(default="task_1")) -> ResetResult:
+async def reset(
+    task_id: str = Query(default="task_1"),
+    custom_data: dict[str, Any] | None = Body(default=None),
+) -> ResetResult:
     try:
-        return _env.reset(task_id=task_id)
+        return _env.reset(task_id=task_id, custom_data=custom_data)
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
 

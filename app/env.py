@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import Optional
+from typing import Any, Optional
 from app.models import Observation, Action, Reward, StepResult, ResetResult, EnvState
 from app.tasks import TASKS, TaskConfig
 from app.graders import grade_task_1, grade_task_2, grade_task_3, grade_task_4, grade_task_5
@@ -26,7 +26,7 @@ class InvoiceProcessingEnv:
         self._best_score: float = 0.0
         self._episode_rewards: list[float] = []
 
-    def reset(self, task_id: str = "task_1") -> ResetResult:
+    def reset(self, task_id: str = "task_1", custom_data: Optional[dict[str, Any]] = None) -> ResetResult:
         if task_id not in TASKS:
             raise ValueError(f"Unknown task_id '{task_id}'. Valid: {list(TASKS.keys())}")
         self._task_config = TASKS[task_id]
@@ -35,7 +35,45 @@ class InvoiceProcessingEnv:
         self._cumulative_reward = 0.0
         self._best_score = 0.0
         self._episode_rewards = []
-        return ResetResult(observation=self._make_observation(), info={"task": task_id})
+
+        observation_payload = self._make_observation().model_dump()
+        info: dict[str, Any] = {"task": task_id}
+
+        if custom_data is not None:
+            if not isinstance(custom_data, dict):
+                raise ValueError("custom_data must be a JSON object when provided.")
+
+            allowed_override_keys = {
+                "task_description",
+                "invoice",
+                "purchase_order",
+                "vendor_whitelist",
+                "batch",
+                "chart_of_accounts",
+                "vendor_statement",
+                "internal_ledger",
+            }
+
+            applied_keys: list[str] = []
+            ignored_keys: list[str] = []
+            for key, value in custom_data.items():
+                if key in allowed_override_keys:
+                    observation_payload[key] = value
+                    applied_keys.append(key)
+                else:
+                    ignored_keys.append(key)
+
+            info["custom_data_applied"] = True
+            info["applied_keys"] = sorted(applied_keys)
+            if ignored_keys:
+                info["ignored_keys"] = sorted(ignored_keys)
+
+        try:
+            observation = Observation(**observation_payload)
+        except Exception as exc:
+            raise ValueError(f"Invalid custom_data payload: {exc}") from exc
+
+        return ResetResult(observation=observation, info=info)
 
     def step(self, action: Action) -> StepResult:
         if self._done:
